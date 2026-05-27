@@ -1,17 +1,17 @@
 <?php
 // =============================================
 // add_pizza.php — Save New Pizza to Database
+// 3NF: pizzas.category_id (FK) instead of category string
 // =============================================
 
 include "db_connect.php";
 
 // ─── 1. COLLECT INPUTS ───────────────────────
-$name          = trim($_POST['name']          ?? '');
-$category      = trim($_POST['category']      ?? '');
-$is_new_cat    = ($_POST['is_new_category']   ?? '0') === '1';
-$ingredients   = trim($_POST['ingredients']   ?? '');
+$name        = trim($_POST['name']          ?? '');
+$category    = trim($_POST['category']      ?? '');
+$is_new_cat  = ($_POST['is_new_category']   ?? '0') === '1';
+$ingredients = trim($_POST['ingredients']   ?? '');
 
-// Prices: always store a number; empty fields come in as "0"
 $p9q  = floatval($_POST['p9q']  ?? 0);
 $p11q = floatval($_POST['p11q'] ?? 0);
 $p9m  = floatval($_POST['p9m']  ?? 0);
@@ -23,8 +23,8 @@ if ($name === '' || $category === '' || $ingredients === '') {
     exit;
 }
 
-// ─── 3. INSERT NEW CATEGORY IF NEEDED ────────
-// Only runs when the admin typed a brand-new category
+// ─── 3. RESOLVE category_id ──────────────────
+// Insert new category if needed, then get its ID
 if ($is_new_cat) {
     $stmtCat = $conn->prepare(
         "INSERT IGNORE INTO categories (category_name) VALUES (?)"
@@ -34,15 +34,27 @@ if ($is_new_cat) {
     $stmtCat->close();
 }
 
+$stmtGetCat = $conn->prepare(
+    "SELECT category_id FROM categories WHERE category_name = ? LIMIT 1"
+);
+$stmtGetCat->bind_param("s", $category);
+$stmtGetCat->execute();
+$catResult = $stmtGetCat->get_result()->fetch_assoc();
+$stmtGetCat->close();
+
+if (!$catResult) {
+    echo "error: category not found";
+    exit;
+}
+$category_id = (int)$catResult['category_id'];
+
 // ─── 4. HANDLE IMAGE UPLOAD ──────────────────
 $image_path = "menu/Other Flavors/Default.png"; // fallback
 
 if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+    $originalName = basename($_FILES['image']['name']);
+    $targetDir    = "menu/" . $category . "/";
 
-    $originalName = basename($_FILES['image']['name']); // e.g. Pizza Supreme.png
-    $targetDir    = "menu/" . $category . "/";          // e.g. menu/Bestsellers/
-
-    // Create folder if it doesn't exist
     if (!is_dir($targetDir)) {
         mkdir($targetDir, 0755, true);
     }
@@ -50,27 +62,26 @@ if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
     $targetPath = $targetDir . $originalName;
 
     if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
-        $image_path = $targetPath; // e.g. menu/Bestsellers/Pizza Supreme.png
+        $image_path = $targetPath;
     }
 }
 
-// ─── 5. INSERT INTO pizzas ───────────────────
+// ─── 5. INSERT INTO pizzas (with category_id) ─
 $stmtPizza = $conn->prepare(
-    "INSERT INTO pizzas (pizza_name, category, ingredients, image_path)
+    "INSERT INTO pizzas (pizza_name, category_id, ingredients, image_path)
      VALUES (?, ?, ?, ?)"
 );
-$stmtPizza->bind_param("ssss", $name, $category, $ingredients, $image_path);
+$stmtPizza->bind_param("siss", $name, $category_id, $ingredients, $image_path);
 
 if (!$stmtPizza->execute()) {
     echo "error: failed to insert pizza - " . $stmtPizza->error;
     exit;
 }
 
-$pizza_id = $conn->insert_id; // the new pizza's auto-incremented ID
+$pizza_id = $conn->insert_id;
 $stmtPizza->close();
 
 // ─── 6. INSERT ALL 4 PRICE VARIANTS ──────────
-// All 4 variants are always inserted (price is 0 if the field was left empty)
 $stmtVariant = $conn->prepare(
     "INSERT INTO pizza_variants (pizza_id, size, cheese, price)
      VALUES (?, ?, ?, ?)"
@@ -94,6 +105,5 @@ foreach ($variants as $v) {
 $stmtVariant->close();
 $conn->close();
 
-// ─── 7. SUCCESS ──────────────────────────────
 echo "success";
 ?>

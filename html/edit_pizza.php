@@ -28,7 +28,7 @@ while ($v = $variantQuery->fetch_assoc()) {
 }
 
 /* ✅ FETCH CATEGORIES */
-$categoriesQuery = $conn->query("SELECT DISTINCT category FROM pizzas");
+$categoriesQuery = $conn->query("SELECT DISTINCT category_name FROM categories ORDER BY category_name");
 ?>
 
 <!DOCTYPE html>
@@ -131,8 +131,10 @@ $categoriesQuery = $conn->query("SELECT DISTINCT category FROM pizzas");
         <?php
         
 $result = $conn->query("
-  SELECT pizza_id, pizza_name, category, ingredients, stock, image_path
-FROM pizzas
+  SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
+         p.ingredients, p.stock, p.image_path
+  FROM pizzas p
+  JOIN categories c ON p.category_id = c.category_id
 ");
 
 

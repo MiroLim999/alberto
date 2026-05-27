@@ -1,6 +1,7 @@
 <?php
 // =============================================
 // save_order.php — Save order to DB
+// 3NF: order_items now stores pizza_id + variant_id FKs
 // Online orders  → status = 'pending'
 // Cashier orders → status = 'completed'
 // =============================================
@@ -29,8 +30,6 @@ $items         = $data['items']              ?? [];
 $is_online     = intval($data['is_online']   ?? 0);
 
 // ── 3. DETERMINE STATUS ──────────────────────
-// Online orders (index.php) go in as 'pending' for the cashier to process.
-// Cashier orders (cashier.php) are finalized immediately as 'completed'.
 $status = $is_online ? 'pending' : 'completed';
 
 // ── 4. BASIC VALIDATION ──────────────────────
@@ -39,7 +38,7 @@ if ($customer_name === '' || $mobile === '' || $branch_id === 0 || empty($items)
     exit;
 }
 
-// ── 5. GET user_id FROM SESSION (if logged in) ──
+// ── 5. GET user_id FROM SESSION ──────────────
 session_start();
 $user_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
 
@@ -50,9 +49,6 @@ $stmtOrder = $conn->prepare("
          address, order_type, payment_method, total_amount, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
-
-// Type string breakdown: i=user_id, s=customer_name, s=mobile, s=email,
-// i=branch_id, s=address, s=order_type, s=payment, d=total, s=status
 $stmtOrder->bind_param(
     "isssisssds",
     $user_id, $customer_name, $mobile, $email, $branch_id,
@@ -67,12 +63,24 @@ if (!$stmtOrder->execute()) {
 $order_id = $conn->insert_id;
 $stmtOrder->close();
 
-// ── 7. INSERT INTO order_items ───────────────
+// ── 7. INSERT INTO order_items (with pizza_id + variant_id) ──
 $stmtItem = $conn->prepare("
     INSERT INTO order_items
-        (order_id, pizza_name, size, cheese, price, quantity, total)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+        (order_id, pizza_id, variant_id, pizza_name, size, cheese, price, quantity, total)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
+
+// Prepared statement to look up pizza_id by name
+$stmtPizzaLookup = $conn->prepare(
+    "SELECT pizza_id FROM pizzas WHERE pizza_name = ? LIMIT 1"
+);
+
+// Prepared statement to look up variant_id
+$stmtVariantLookup = $conn->prepare(
+    "SELECT variant_id FROM pizza_variants
+     WHERE pizza_id = ? AND size = ? AND cheese = ? AND price = ?
+     LIMIT 1"
+);
 
 foreach ($items as $item) {
     $pizza_name = trim($item['pizza']    ?? '');
@@ -82,12 +90,34 @@ foreach ($items as $item) {
     $quantity   = intval($item['quantity']   ?? 1);
     $item_total = floatval($item['total']    ?? 0);
 
-    // Strip trailing " from size if present (table stores "9"" but DB stores "9")
-    $size = rtrim($size, '"');
+    // Strip trailing " from size if present
+    $size_clean = rtrim($size, '"');
+    $size_int   = intval($size_clean);
+
+    // Look up pizza_id
+    $pizza_id = null;
+    $stmtPizzaLookup->bind_param("s", $pizza_name);
+    $stmtPizzaLookup->execute();
+    $pizzaRow = $stmtPizzaLookup->get_result()->fetch_assoc();
+    if ($pizzaRow) {
+        $pizza_id = (int)$pizzaRow['pizza_id'];
+    }
+
+    // Look up variant_id
+    $variant_id = null;
+    if ($pizza_id) {
+        $stmtVariantLookup->bind_param("issd", $pizza_id, $size_int, $cheese, $price);
+        $stmtVariantLookup->execute();
+        $variantRow = $stmtVariantLookup->get_result()->fetch_assoc();
+        if ($variantRow) {
+            $variant_id = (int)$variantRow['variant_id'];
+        }
+    }
 
     $stmtItem->bind_param(
-        "isssdid",
-        $order_id, $pizza_name, $size, $cheese, $price, $quantity, $item_total
+        "iiissssdid",
+        $order_id, $pizza_id, $variant_id,
+        $pizza_name, $size_clean, $cheese, $price, $quantity, $item_total
     );
 
     if (!$stmtItem->execute()) {
@@ -96,11 +126,11 @@ foreach ($items as $item) {
     }
 }
 
+$stmtPizzaLookup->close();
+$stmtVariantLookup->close();
 $stmtItem->close();
 
-// ── 8. DEDUCT STOCK (only for completed cashier orders) ──────────
-// Online orders stay as pending — stock is only deducted once the
-// cashier actually processes and finalizes the order.
+// ── 8. DEDUCT STOCK (completed cashier orders only) ──
 if (!$is_online) {
     foreach ($items as $item) {
         $pizza_name = $conn->real_escape_string(trim($item['pizza'] ?? ''));
@@ -118,8 +148,8 @@ $conn->close();
 
 // ── 9. RESPOND ───────────────────────────────
 echo json_encode([
-    "status"   => "success",
-    "order_id" => $order_id,
+    "status"       => "success",
+    "order_id"     => $order_id,
     "order_status" => $status
 ]);
 ?>

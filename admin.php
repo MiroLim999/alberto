@@ -46,10 +46,11 @@ $goodStock     = $conn->query("SELECT COUNT(*) AS c FROM pizzas WHERE stock >= 1
 
 // ── LOW STOCK PIZZAS (for inventory table) ──
 $lowStockPizzas = $conn->query("
-  SELECT pizza_name, category, stock
-  FROM pizzas
-  WHERE stock < 10
-  ORDER BY stock ASC
+  SELECT p.pizza_name, c.category_name AS category, p.stock
+  FROM pizzas p
+  JOIN categories c ON p.category_id = c.category_id
+  WHERE p.stock < 10
+  ORDER BY p.stock ASC
   LIMIT 10
 ");
 
@@ -850,7 +851,12 @@ if (isset($_SESSION['user_id'])) {
       </thead>
       <tbody>
         <?php
-        $result = $conn->query("SELECT pizza_id, pizza_name, category, ingredients, stock, image_path FROM pizzas");
+        $result = $conn->query("
+            SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
+                   p.ingredients, p.stock, p.image_path
+            FROM pizzas p
+            JOIN categories c ON p.category_id = c.category_id
+        ");
         while ($row = $result->fetch_assoc()):
           $stock = (int)$row['stock'];
           if ($stock === 0)       { $badgeClass = 'out';  $badgeIcon = 'fa-circle-xmark'; }
