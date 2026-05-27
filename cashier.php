@@ -649,7 +649,7 @@ $menuResult = $conn->query($menuQuery);
     <a href="cashier.php">HOME</a>
 
     <?php if (isset($_SESSION['user_id'])): ?>
-      <a href="profile_customer.php"><?= $_SESSION['username']; ?></a>
+      <a href="profile_staff.php"><?= htmlspecialchars($_SESSION['username']); ?></a>
       <a href="logout.php">LOG OUT</a>
     <?php else: ?>
       <a href="signup.php">SIGN UP</a>

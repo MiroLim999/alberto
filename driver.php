@@ -815,6 +815,7 @@ function getOrderItems($conn, $oid) {
   <img src="logo/Alberto's Pizza.png" class="logo-img" alt="Alberto's Pizza Logo">
   <div class="nav-links">
     <a href="driver.php">DASHBOARD</a>
+    <a href="profile_staff.php"><?= htmlspecialchars($_SESSION['username'] ?? 'Profile') ?></a>
     <a href="logout.php">LOG OUT</a>
   </div>
 </header>
