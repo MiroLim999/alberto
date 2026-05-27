@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Alberto's Pizza | Cashier</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- NAVBAR (same style, different role label) -->
+<header class="navbar">
+  <img src="logo/Alberto's Pizza.png" class="logo-img">
+
+  <div class="nav-links">
+    <a href="index.html">HOME</a>
+    <a href="#" class="nav-btn">CASHIER</a>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- LEFT SIDE: MENU (UNCHANGED FROM INDEX.HTML) -->
+  <section class="menu-group">
+
+    <div class="big-image">
+      <img id="bigPreview" src="" alt="Pizza Preview">
+    </div>
+
+    <h2 id="pizzaName">Select a Pizza</h2>
+    <p id="ingredients">Ingredients will appear here</p>
+
+    <div class="menu-scroll">
+      <h3>BESTSELLERS</h3>
+      <img src="menu/Bestsellers/Pizza Supreme.png" class="menu-img"
+           onclick="selectPizza('Pizza Supreme', this.src)">
+      <img src="menu/Bestsellers/Hawaiian.png" class="menu-img"
+           onclick="selectPizza('Hawaiian', this.src)">
+
+      <h3>KIDDIE'S FAVORITES</h3>
+      <img src="menu/Kiddie's Favorites/Cookies n' Cheese.png" class="menu-img"
+           onclick="selectPizza('Cookies n Cheese', this.src)">
+      <img src="menu/Kiddie's Favorites/Creamy Cheese.png" class="menu-img"
+           onclick="selectPizza('Creamy Cheese', this.src)">
+    </div>
+
+  </section>
+
+  <!-- RIGHT SIDE -->
+  <section class="order-group">
+
+    <!-- ✅ NEW: PENDING ONLINE ORDERS -->
+    <h3>PENDING ONLINE ORDERS</h3>
+    <table id="pendingOrders">
+      <tr>
+        <th>CUSTOMER</th>
+        <th>ITEM</th>
+        <th>QTY</th>
+        <th>TOTAL</th>
+        <th>TYPE</th>
+        <th>PAYMENT</th>
+        <th>ACTION</th>
+      </tr>
+      <tr>
+        <td>user123</td>
+        <td>Pizza Supreme</td>
+        <td>2</td>
+        <td>290</td>
+        <td>PICK-UP</td>
+        <td>GCASH</td>
+        <td>
+          <button onclick="processPendingOrder()">PROCESS</button>
+        </td>
+      </tr>
+    </table>
+
+    <!-- ✅ EXISTING: PIZZA ORDER -->
+    <h3>PIZZA ORDER</h3>
+
+    <label>Pizza:</label>
+    <select id="pizzaSelect" onchange="updatePrice()">
+      <option value="">Choose a pizza...</option>
+      <option>Pizza Supreme</option>
+      <option>Hawaiian</option>
+      <option>Cookies n Cheese</option>
+      <option>Creamy Cheese</option>
+    </select>
+
+    <label>Size:</label>
+    <input type="radio" name="size" value="9" checked onclick="updatePrice()"> 9"
+    <input type="radio" name="size" value="11" onclick="updatePrice()"> 11"
+
+    <label>Cheese:</label>
+    <input type="radio" name="cheese" value="Quickmelt" checked onclick="updatePrice()"> Quickmelt
+    <input type="radio" name="cheese" value="Mozzarella" onclick="updatePrice()"> Mozzarella
+
+    <label>Quantity:</label>
+    <input type="number" id="qty" min="1" value="1" onchange="updatePrice()">
+
+    <label>Current Price:</label>
+    <input type="text" id="price" readonly value="0">
+
+    <div class="btn-row">
+      <button onclick="clearPizzaForm()">CLEAR</button>
+      <button onclick="addToOrder()">ADD</button>
+    </div>
+
+    <!-- ✅ EXISTING: ORDER TABLE -->
+    <h3>ORDER</h3>
+    <table id="orderTable">
+      <tr>
+        <th>ITEM</th>
+        <th>SIZE</th>
+        <th>CHEESE</th>
+        <th>PRICE</th>
+        <th>QNTY</th>
+        <th>OVERALL</th>
+        <th>ACTION</th>
+      </tr>
+    </table>
+
+    <button class="clear-order" onclick="clearOrder()">CLEAR ORDER</button>
+
+    <!-- ✅ EXISTING: CUSTOMER INFO -->
+    <h3>CUSTOMER INFO</h3>
+    <input type="text" id="customerName" placeholder="Customer Username">
+    <input type="text" id="contactNumber" placeholder="Contact Number">
+
+    <span class="optional-label">Optional</span>
+    <input type="email" id="optionalEmail" placeholder="Email address">
+
+    <input type="text" id="customerAddress" placeholder="Address">
+
+    <div>
+      <label>ORDER:</label>
+      <input type="radio" name="orderType" checked> PICK-UP
+      <input type="radio" name="orderType"> DELIVERY
+    </div>
+
+    <div>
+      <label>PAYMENT:</label>
+      <input type="radio" name="payment" checked> CASH
+      <input type="radio" name="payment"> GCASH
+    </div>
+
+    <!-- ✅ NEW: CASHIER SECTION -->
+    <h3>CASHIER</h3>
+
+<label>Amount Received</label>
+<input type="text" id="cashReceived" readonly placeholder="₱0">
+
+<label>Change</label>
+<input type="text" id="change" readonly>
+
+<!-- ✅ MINI CALCULATOR -->
+<div class="calculator">
+  <button onclick="calcInput('7')">7</button>
+  <button onclick="calcInput('8')">8</button>
+  <button onclick="calcInput('9')">9</button>
+
+  <button onclick="calcInput('4')">4</button>
+  <button onclick="calcInput('5')">5</button>
+  <button onclick="calcInput('6')">6</button>
+
+  <button onclick="calcInput('1')">1</button>
+  <button onclick="calcInput('2')">2</button>
+  <button onclick="calcInput('3')">3</button>
+
+  <button onclick="calcDel()">DEL</button>
+  <button onclick="calcInput('0')">0</button>
+  <button onclick="calcClear()">CLR</button>
+</div>
+
+<div class="btn-row">
+  <button onclick="cancelAll()">CANCEL ORDER</button>
+  <button onclick="finalizeCashierOrder()">FINALIZE ORDER</button>
+</div>
+
+  </section>
+</div>
+
+<script src="js/home.js"></script>
+<script src="js/cashier.js"></script>
+</body>
+</html>

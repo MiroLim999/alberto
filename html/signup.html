@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Alberto's Pizza | Sign Up</title>
+
+  <!-- ✅ CORRECT CSS LINK -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+  <img src="logo/Alberto's Pizza.png" class="logo-img" alt="Alberto's Pizza Logo">
+
+  <div class="nav-links">
+    <a href="index.html">HOME</a>
+    <a href="signup.html" class="nav-btn">SIGN UP</a>
+    <!-- <button onclick="loginAlert()">LOG IN</button> -->
+    <a href="login.html">LOG IN</a>
+  </div>
+</header>
+
+<!-- SIGN UP CONTAINER -->
+<div class="signup-wrapper">
+
+  <div class="signup-card">
+
+    <!-- LEFT SIDE (INFO) -->
+    <div class="signup-info">
+      <h2>Register</h2>
+
+      <p>
+        Welcome to <strong>Alberto’s Pizza</strong>!  
+        Sign up or create an account to enjoy a smoother ordering experience.
+      </p>
+
+      <p class="terms-text">
+        By continuing, you agree to our
+        <a href="#" onclick="termsAlert(); return false;">Terms &amp; Conditions</a>
+        and
+        <a href="#" onclick="privacyAlert(); return false;">Privacy Notice</a>.
+      </p>
+
+      <p class="login-link">
+        Already have an account?
+        <a href="#" onclick="loginAlert(); return false;">Log in</a>
+      </p>
+    </div>
+
+    <!-- RIGHT SIDE (FORM) -->
+    <div class="signup-form">
+
+      <label>Username *</label>
+      <input
+        type="text"
+        id="username"
+        placeholder="Choose a username"
+      >
+
+      <label>Password *</label>
+      <input
+        type="password"
+        id="password"
+        placeholder="Create a password"
+      >
+
+      <label>Date of Birth</label>
+      
+      <div class="dob">
+        <select id="dobMonth" required>
+          <option value="" disabled selected hidden>Month</option>
+        </select>
+
+        <select id="dobDay" required>
+          <option value="" disabled selected hidden>Day</option>
+        </select>
+
+        <select id="dobYear" required>
+          <option value="" disabled selected hidden>Year</option>
+        </select>
+      </div>
+
+      <label class="gender-label">Gender *</label>
+
+      <div class="gender-inline">
+        <label>
+          <input type="radio" name="gender" value="Male">
+          Male
+        </label>
+
+        <label>
+          <input type="radio" name="gender" value="Female">
+          Female
+        </label>
+
+        <label>
+          <input type="radio" name="gender" value="Others">
+          Other
+        </label>
+      </div>
+
+      <label>Mobile Number *</label>
+      <input
+        type="text"
+        id="mobileNumber"
+        placeholder="09XXXXXXXXX"
+        maxlength="11"
+        inputmode="numeric"
+        oninput="restrictMobileNumber(this)">
+
+
+      <label>Email *</label>
+      <input
+        type="email"
+        id="emailInput"
+        placeholder="Enter your email"
+        oninput="validateEmail(this)"
+      >
+
+      <span id="emailError" class="error-text">
+        Please enter a valid Email Address
+      </span>
+
+      <button class="create-account-btn" onclick="createAccount()">
+        Create Account
+      </button>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ✅ CORRECT JS LINK -->
+<script src="js/home.js"></script>
+
+</body>
+</html>
