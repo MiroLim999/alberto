@@ -3,8 +3,15 @@
 // add_pizza.php — Save New Pizza to Database
 // Strict 3NF: ingredients split into ingredients + pizza_ingredients
 // =============================================
-
+session_start();
 include "db_connect.php";
+
+// ── Role guard: admin only ──
+if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo "forbidden";
+    exit;
+}
 
 // ─── 1. COLLECT INPUTS ───────────────────────
 $name           = trim($_POST['name']            ?? '');

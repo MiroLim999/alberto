@@ -7,11 +7,13 @@ if (!isset($_SESSION['user_id'])) {
   exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id = intval($_SESSION['user_id']);
 
-$sql = "SELECT * FROM users WHERE user_id = '$user_id' LIMIT 1";
-$result = $conn->query($sql);
-$user = $result->fetch_assoc();
+$stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ? LIMIT 1");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 // ── Guard: user must exist ────────────────────────────────────
 if (!$user) {
@@ -33,27 +35,63 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $year     = $_POST['year']          ?? '';
     $birth_date = "$year-$month-$day";
 
-    // ── Prepared statement — no SQL injection ─────────────────
-    $stmt = $conn->prepare("
-        UPDATE users SET
-            username      = ?,
-            password      = ?,
-            mobile_number = ?,
-            email         = ?,
-            gender        = ?,
-            birth_date    = ?
-        WHERE user_id = ?
-    ");
-    $stmt->bind_param("ssssssi", $username, $password, $mobile, $email, $gender, $birth_date, $user_id);
+    $editError = '';
 
-    if ($stmt->execute()) {
-        $_SESSION['username'] = $username;
+    // Basic validation
+    if ($username === '' || strlen($username) < 3) {
+        $editError = 'Username must be at least 3 characters.';
+    } elseif ($password === '' || strlen($password) < 6) {
+        $editError = 'Password must be at least 6 characters.';
+    } elseif (!preg_match('/^09\d{9}$/', $mobile)) {
+        $editError = 'Mobile must be 11 digits starting with 09.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $editError = 'Please enter a valid email address.';
+    }
+
+    // Duplicate username (excluding self)
+    if (!$editError) {
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE username = ? AND user_id <> ? LIMIT 1");
+        $stmt->bind_param("si", $username, $user_id);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $editError = 'This username is already taken by another account.';
+        }
         $stmt->close();
-        header("Location: profile_customer.php");
-        exit;
-    } else {
-        echo "Error updating profile: " . $stmt->error;
+    }
+
+    // Duplicate email (excluding self)
+    if (!$editError) {
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id <> ? LIMIT 1");
+        $stmt->bind_param("si", $email, $user_id);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $editError = 'This email is already in use by another account.';
+        }
         $stmt->close();
+    }
+
+    if (!$editError) {
+        $stmt = $conn->prepare("
+            UPDATE users SET
+                username      = ?,
+                password      = ?,
+                mobile_number = ?,
+                email         = ?,
+                gender        = ?,
+                birth_date    = ?
+            WHERE user_id = ?
+        ");
+        $stmt->bind_param("ssssssi", $username, $password, $mobile, $email, $gender, $birth_date, $user_id);
+
+        if ($stmt->execute()) {
+            $_SESSION['username'] = $username;
+            $stmt->close();
+            header("Location: profile_customer.php");
+            exit;
+        } else {
+            $editError = "Error updating profile: " . $stmt->error;
+            $stmt->close();
+        }
     }
 }
 
@@ -371,6 +409,13 @@ $field = isset($_GET['field']) ? $_GET['field'] : '';
     <!-- RIGHT FORM PANEL -->
     <div class="signup-form">
       <div class="form-title">Account Information</div>
+
+      <?php if (!empty($editError)): ?>
+        <div style="background:#fff5f5;border:1.5px solid #FFCDD2;border-radius:8px;padding:10px 14px;color:#c62828;font-size:13px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <?= htmlspecialchars($editError) ?>
+        </div>
+      <?php endif; ?>
 
       <form method="POST">
 

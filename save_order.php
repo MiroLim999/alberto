@@ -89,11 +89,15 @@ $stmtItem->close();
 
 // ── Deduct stock (cashier completed orders only) ──────────────
 if (!$is_online) {
+    $stmtStock = $conn->prepare("UPDATE pizzas SET stock = GREATEST(stock - ?, 0) WHERE pizza_name = ?");
     foreach ($items as $item) {
-        $pname = $conn->real_escape_string(trim($item['pizza'] ?? ''));
+        $pname = trim($item['pizza'] ?? '');
         $qty   = intval($item['quantity'] ?? 1);
-        $conn->query("UPDATE pizzas SET stock=GREATEST(stock-$qty,0) WHERE pizza_name='$pname'");
+        if ($pname === '' || $qty <= 0) continue;
+        $stmtStock->bind_param("is", $qty, $pname);
+        $stmtStock->execute();
     }
+    $stmtStock->close();
 }
 
 $conn->close();

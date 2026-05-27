@@ -7,9 +7,12 @@ $branches = $conn->query("SELECT * FROM branches ORDER BY branch_name ASC");
 $user = null;
 
 if (isset($_SESSION['user_id'])) {
-    $user_id = $_SESSION['user_id'];
-    $result = $conn->query("SELECT * FROM users WHERE user_id = '$user_id'");
-    $user = $result->fetch_assoc();
+    $user_id = intval($_SESSION['user_id']);
+    $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 }
 
 $menuQuery = "
@@ -105,13 +108,15 @@ $menuResult = $conn->query($menuQuery);
     <select id="pizzaSelect" onchange="updatePrice()">
       <option value="">Choose a pizza...</option>
       <?php
-      $pizzaDropdownQuery = "SELECT DISTINCT pizza_name FROM pizzas ORDER BY pizza_name";
-      $pizzaDropdownResult = $conn->query($pizzaDropdownQuery);
+      // Single query: get distinct pizza_name with MAX stock (avoids N+1)
+      $pizzaDropdownResult = $conn->query("
+        SELECT pizza_name, MAX(stock) AS stock
+        FROM pizzas
+        GROUP BY pizza_name
+        ORDER BY pizza_name
+      ");
       while ($row = $pizzaDropdownResult->fetch_assoc()) {
-        $stockRow = $conn->query(
-          "SELECT stock FROM pizzas WHERE pizza_name='" . $conn->real_escape_string($row['pizza_name']) . "' LIMIT 1"
-        )->fetch_assoc();
-        $stock = $stockRow ? intval($stockRow['stock']) : 0;
+        $stock = (int)$row['stock'];
         echo "<option value=\"" . htmlspecialchars($row['pizza_name']) . "\"
               data-stock=\"" . $stock . "\">"
           . htmlspecialchars($row['pizza_name']) .

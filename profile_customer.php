@@ -7,10 +7,12 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
-$sql = "SELECT * FROM users WHERE user_id = '$user_id' LIMIT 1";
-$result = $conn->query($sql);
-$user = $result->fetch_assoc();
+$user_id = intval($_SESSION['user_id']);
+$stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ? LIMIT 1");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 if (!$user) {
     echo "User not found.";

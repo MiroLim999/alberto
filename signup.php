@@ -674,7 +674,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }, 10);
 });
 </script>
-</script>
 
 </body>
 </html>
