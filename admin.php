@@ -703,6 +703,12 @@ if (isset($_SESSION['user_id'])) {
     <!-- ✅ PRODUCTS -->
 <div id="products" class="section">
 
+  <?php
+  // Pre-fetch archived count for the toolbar badge
+  $archivedCountRow = $conn->query("SELECT COUNT(*) AS c FROM pizzas WHERE deleted_at IS NOT NULL")->fetch_assoc();
+  $archivedCount = (int)$archivedCountRow['c'];
+  ?>
+
   <style>
     /* ── PRODUCTS SECTION ── */
     .prod-header {
@@ -867,6 +873,61 @@ if (isset($_SESSION['user_id'])) {
     .tbl-btn-edit:hover   { background: #c7d9ff; }
     .tbl-btn-delete { background: #fdecea; color: #c62828; }
     .tbl-btn-delete:hover { background: #f9c9c6; }
+
+    /* ── View tabs (Active / Archived / All) ── */
+    .prod-view-tabs {
+      display: flex;
+      gap: 3px;
+      background: #f0f0f0;
+      padding: 4px;
+      border-radius: 8px;
+    }
+    .prod-view-tab {
+      padding: 7px 14px;
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 700;
+      color: #888;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .prod-view-tab:hover { background: #e4e4e4; color: #444; }
+    .prod-view-tab.active { background: #fff; color: #222; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+    .archive-count-badge {
+      background: #f47c00;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: 10px;
+      line-height: 1.4;
+    }
+
+    /* ── Search clear button ── */
+    .prod-search-wrap { position: relative; }
+    .prod-search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 13px;
+      padding: 2px;
+      display: none;
+      transition: color 0.15s;
+    }
+    .prod-search-clear:hover { color: #888; }
+    .prod-search-wrap input { padding-right: 28px !important; }
   </style>
 
   <div class="prod-header">
@@ -874,11 +935,13 @@ if (isset($_SESSION['user_id'])) {
     <div class="prod-toolbar">
       <div class="prod-search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" id="searchPizza" placeholder="Search pizza..." onkeyup="searchPizza()">
+        <input type="text" id="searchPizza" placeholder="Search by name or ingredient..." oninput="filterProducts()">
+        <button class="prod-search-clear" id="searchClearBtn" onclick="clearSearch()" title="Clear search">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-      <select class="prod-filter" id="filterCategory" onchange="filterPizza()">
+      <select class="prod-filter" id="filterCategory" onchange="filterProducts()">
         <option value="all">All Categories</option>
-        <option value="alphabetical">Alphabetical (A-Z)</option>
         <?php
         $filterCats = $conn->query("SELECT category_name FROM categories ORDER BY category_name ASC");
         while ($fc = $filterCats->fetch_assoc()) {
@@ -888,11 +951,25 @@ if (isset($_SESSION['user_id'])) {
         }
         ?>
       </select>
+      <!-- View filter: Active / Archived / All -->
+      <div class="prod-view-tabs">
+        <button class="prod-view-tab active" data-view="active"   onclick="setView('active')">Active</button>
+        <button class="prod-view-tab"         data-view="archived" onclick="setView('archived')">
+          🗄️ Archived
+          <?php if ($archivedCount > 0): ?>
+            <span class="archive-count-badge"><?= $archivedCount ?></span>
+          <?php endif; ?>
+        </button>
+        <button class="prod-view-tab"         data-view="all"      onclick="setView('all')">All</button>
+      </div>
       <button class="btn-add-pizza" onclick="showSection('addPizza')">
         <i class="fa-solid fa-plus"></i> Add New Pizza
       </button>
     </div>
   </div>
+
+  <!-- Result count -->
+  <div id="prodResultCount" style="font-size:12px; color:#aaa; margin-bottom:10px; min-height:18px;"></div>
 
   <div class="pizza-table-wrap">
     <table class="pizza-table" id="pizzaTable">
@@ -902,9 +979,9 @@ if (isset($_SESSION['user_id'])) {
           <th>Category</th>
           <th>Ingredients</th>
           <th>Stock</th>
-          <th style="text-align:center;">Stock In</th>
-          <th style="text-align:center;">Edit</th>
-          <th style="text-align:center;">Delete</th>
+          <th style="text-align:center;">Stock In / Archived On</th>
+          <th style="text-align:center;">Edit / Restore</th>
+          <th style="text-align:center;">Archive / Delete</th>
         </tr>
       </thead>
       <tbody>
@@ -926,7 +1003,10 @@ if (isset($_SESSION['user_id'])) {
           elseif ($stock < 10)    { $badgeClass = 'low';  $badgeIcon = 'fa-triangle-exclamation'; }
           else                    { $badgeClass = 'good'; $badgeIcon = 'fa-circle-check'; }
         ?>
-        <tr>
+        <tr data-name="<?= strtolower(htmlspecialchars($row['pizza_name'])) ?>"
+            data-ingredients="<?= strtolower(htmlspecialchars($row['ingredients'] ?? '')) ?>"
+            data-category="<?= htmlspecialchars($row['category']) ?>"
+            data-status="active">
           <td class="pizza-name-cell"><?= htmlspecialchars($row['pizza_name']) ?></td>
           <td><span class="pizza-category-pill"><?= htmlspecialchars($row['category']) ?></span></td>
           <td class="pizza-ingredients-cell" title="<?= htmlspecialchars($row['ingredients']) ?>">
@@ -961,22 +1041,56 @@ if (isset($_SESSION['user_id'])) {
           </td>
         </tr>
         <?php endwhile; ?>
+        <!-- ── ARCHIVED ROWS (hidden by default, shown when view=archived|all) ── -->
+        <?php
+        $archivedResult = $conn->query("
+            SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
+                   p.stock, p.image_path, p.deleted_at
+            FROM pizzas p
+            JOIN categories c ON p.category_id = c.category_id
+            WHERE p.deleted_at IS NOT NULL
+            ORDER BY p.deleted_at DESC
+        ");
+        while ($arow = $archivedResult->fetch_assoc()):
+        ?>
+        <tr data-name="<?= strtolower(htmlspecialchars($arow['pizza_name'])) ?>"
+            data-ingredients=""
+            data-category="<?= htmlspecialchars($arow['category']) ?>"
+            data-status="archived"
+            style="display:none; opacity:0.72; background:#fafafa;">
+          <td class="pizza-name-cell" style="color:#888;">
+            <?= htmlspecialchars($arow['pizza_name']) ?>
+            <span style="font-size:10px; background:#f0f0f0; color:#aaa; padding:2px 7px; border-radius:10px; margin-left:6px; font-weight:700;">ARCHIVED</span>
+          </td>
+          <td><span class="pizza-category-pill" style="background:#f5f5f5; color:#aaa;"><?= htmlspecialchars($arow['category']) ?></span></td>
+          <td class="pizza-ingredients-cell" style="color:#ccc;">—</td>
+          <td><span class="stock-badge" style="background:#f5f5f5; color:#aaa;"><?= (int)$arow['stock'] ?></span></td>
+          <td style="text-align:center; font-size:11px; color:#bbb;"><?= date('M d, Y', strtotime($arow['deleted_at'])) ?></td>
+          <td style="text-align:center;">
+            <button class="tbl-action-btn" style="background:#e8f8ee; color:#2e7d50;"
+              onclick="restorePizza(<?= $arow['pizza_id'] ?>, '<?= htmlspecialchars(addslashes($arow['pizza_name'])) ?>')"
+              title="Restore to menu">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </td>
+          <td style="text-align:center;">
+            <button class="tbl-action-btn tbl-btn-delete"
+              onclick="permanentDelete(<?= $arow['pizza_id'] ?>, '<?= htmlspecialchars(addslashes($arow['pizza_name'])) ?>')"
+              title="Delete permanently">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+        <?php endwhile; ?>
+        <!-- Empty state row -->
+        <tr id="noResultsRow" style="display:none;">
+          <td colspan="7" style="text-align:center; padding:32px; color:#bbb; font-style:italic; font-size:13px;">
+            No products match your search.
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
-
-  <!-- ── ARCHIVED PIZZAS ─────────────────────────── -->
-  <?php
-  $archivedResult = $conn->query("
-      SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
-             p.stock, p.image_path, p.deleted_at
-      FROM pizzas p
-      JOIN categories c ON p.category_id = c.category_id
-      WHERE p.deleted_at IS NOT NULL
-      ORDER BY p.deleted_at DESC
-  ");
-  $archivedCount = $archivedResult->num_rows;
-  ?>
 
   <div style="margin-top:32px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
@@ -2595,71 +2709,121 @@ function revertEdit() {
   document.getElementById("editImage").value = "";
 }
 
+// ══ ADMIN CONFIRMATION MODAL ══════════════════════════════════
+let _acmCallback = null;
+
+function showAdminConfirm(icon, iconBg, title, msg, confirmLabel, confirmColor, callback) {
+  document.getElementById('acmIconWrap').textContent       = icon;
+  document.getElementById('acmIconWrap').style.background  = iconBg;
+  document.getElementById('acmTitle').textContent          = title;
+  document.getElementById('acmMsg').textContent            = msg;
+  const btn = document.getElementById('acmConfirmBtn');
+  btn.textContent      = confirmLabel;
+  btn.style.background = confirmColor;
+  _acmCallback = callback;
+  const modal = document.getElementById('adminConfirmModal');
+  modal.style.display = 'flex';
+}
+
+function closeAdminConfirm() {
+  document.getElementById('adminConfirmModal').style.display = 'none';
+  _acmCallback = null;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('acmConfirmBtn').addEventListener('click', function() {
+    const cb = _acmCallback;
+    closeAdminConfirm();
+    if (typeof cb === 'function') cb();
+  });
+
+  document.getElementById('adminConfirmModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAdminConfirm();
+  });
+});
+
+// ── Archive (soft delete) a pizza ─────────────────────────────
 function confirmDelete(id) {
-
-  const confirmAction = confirm("Are you sure you want to delete this product?");
-
-  if (!confirmAction) {
-    return; // user clicked NO
-  }
-
-  fetch("delete_pizza.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "pizza_id=" + id
-  })
-  .then(res => res.text())
-  .then(data => {
-    if (data.trim() === "success") {
-      sessionStorage.setItem("activeSection", "products");
-      location.reload();
-    } else {
-      alert("Delete failed: " + data.trim());
+  showAdminConfirm(
+    '🗄️', '#FFF3E0',
+    'Archive this pizza?',
+    'The pizza will be hidden from the menu and moved to the archive. You can restore it at any time.',
+    'Yes, Archive',
+    '#f47c00',
+    () => {
+      fetch("delete_pizza.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "pizza_id=" + id
+      })
+      .then(res => res.text())
+      .then(data => {
+        if (data.trim() === "success") {
+          sessionStorage.setItem("activeSection", "products");
+          location.reload();
+        } else {
+          alert("Archive failed: " + data.trim());
+        }
+      })
+      .catch(err => alert("Network error: " + err));
     }
-  })
-  .catch(err => alert("Network error: " + err));
-
+  );
 }
 
+// ── Restore a pizza from archive ──────────────────────────────
 function restorePizza(id, name) {
-  if (!confirm(`Restore "${name}"? It will become visible on the menu again.`)) return;
-
-  fetch("restore_pizza.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "pizza_id=" + id
-  })
-  .then(res => res.text())
-  .then(data => {
-    if (data.trim() === "success") {
-      sessionStorage.setItem("activeSection", "products");
-      location.reload();
-    } else {
-      alert("Restore failed: " + data.trim());
+  showAdminConfirm(
+    '✅', '#D1FAE5',
+    'Restore this pizza?',
+    `"${name}" will become visible on the menu again and available for ordering.`,
+    'Yes, Restore',
+    '#2e7d50',
+    () => {
+      fetch("restore_pizza.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "pizza_id=" + id
+      })
+      .then(res => res.text())
+      .then(data => {
+        if (data.trim() === "success") {
+          sessionStorage.setItem("activeSection", "products");
+          location.reload();
+        } else {
+          alert("Restore failed: " + data.trim());
+        }
+      })
+      .catch(err => alert("Network error: " + err));
     }
-  })
-  .catch(err => alert("Network error: " + err));
+  );
 }
 
+// ── Permanently delete a pizza ────────────────────────────────
 function permanentDelete(id, name) {
-  if (!confirm(`⚠️ Permanently delete "${name}"?\n\nThis CANNOT be undone. All pizza data will be removed from the database.`)) return;
-  if (!confirm(`Are you absolutely sure? This will permanently delete "${name}".`)) return;
-
-  fetch("permanent_delete_pizza.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "pizza_id=" + id
-  })
-  .then(res => res.text())
-  .then(data => {
-    if (data.trim() === "success") {
-      sessionStorage.setItem("activeSection", "products");
-      location.reload();
-    } else {
-      alert("Permanent delete failed: " + data.trim());
+  showAdminConfirm(
+    '🗑️', '#FEE2E2',
+    'Permanently delete?',
+    `"${name}" will be removed from the database forever. This cannot be undone. If this pizza appears in past orders, deletion will be blocked.`,
+    'Delete Forever',
+    '#c62828',
+    () => {
+      fetch("permanent_delete_pizza.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "pizza_id=" + id
+      })
+      .then(res => res.text())
+      .then(data => {
+        if (data.trim() === "success") {
+          sessionStorage.setItem("activeSection", "products");
+          location.reload();
+        } else {
+          alert("Permanent delete failed: " + data.trim());
+        }
+      })
+      .catch(err => alert("Network error: " + err));
     }
-  })
-  .catch(err => alert("Network error: " + err));
+  );
 }
 
 function resetAddPizza() {
@@ -2783,66 +2947,87 @@ function saveNewPizza() {
   });
 }
 
-function searchPizza() {
+// ── PRODUCTS: unified search + category + view filter ──────────
+let _currentView = 'active'; // 'active' | 'archived' | 'all'
 
-  const input = document.getElementById("searchPizza").value.toLowerCase();
-  const table = document.getElementById("pizzaTable");
-  const rows = table.getElementsByTagName("tr");
+function setView(view) {
+  _currentView = view;
+  document.querySelectorAll('.prod-view-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+  filterProducts();
+}
 
-  for (let i = 1; i < rows.length; i++) {
+function clearSearch() {
+  document.getElementById('searchPizza').value = '';
+  document.getElementById('searchClearBtn').style.display = 'none';
+  filterProducts();
+}
 
-    const nameCell = rows[i].cells[0];
-    if (!nameCell) continue;
+function filterProducts() {
+  const query    = document.getElementById('searchPizza').value.trim().toLowerCase();
+  const category = document.getElementById('filterCategory').value;
+  const view     = _currentView;
 
-    const name = nameCell.textContent.toLowerCase();
+  // Show/hide clear button
+  const clearBtn = document.getElementById('searchClearBtn');
+  if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
 
-    if (name.includes(input)) {
-      rows[i].style.display = "";
+  const table = document.getElementById('pizzaTable');
+  if (!table) return;
+
+  // Use all <tr> elements inside tbody, skip the header
+  const tbody = table.tBodies[0];
+  if (!tbody) return;
+  const rows = Array.from(tbody.rows);
+  let visible = 0;
+
+  rows.forEach(row => {
+    // Skip the empty-state row
+    if (row.getAttribute('id') === 'noResultsRow') return;
+
+    const status      = row.getAttribute('data-status') || 'active';
+    const rowCategory = row.getAttribute('data-category') || '';
+    // Fall back to reading cell text if data-name is missing
+    const name        = (row.getAttribute('data-name') || row.cells[0]?.textContent || '').toLowerCase();
+    const ingredients = (row.getAttribute('data-ingredients') || row.cells[2]?.textContent || '').toLowerCase();
+
+    // 1. View filter
+    const viewMatch = view === 'all' ||
+                      (view === 'active'   && status === 'active') ||
+                      (view === 'archived' && status === 'archived');
+
+    // 2. Category filter
+    const catMatch = category === 'all' || rowCategory === category;
+
+    // 3. Search filter — matches name OR ingredients
+    const searchMatch = !query ||
+                        name.includes(query) ||
+                        ingredients.includes(query);
+
+    const show = viewMatch && catMatch && searchMatch;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  // Show/hide empty state row
+  const noResults = document.getElementById('noResultsRow');
+  if (noResults) noResults.style.display = visible === 0 ? '' : 'none';
+
+  // Update result count label
+  const countEl = document.getElementById('prodResultCount');
+  if (countEl) {
+    if (query || category !== 'all' || view !== 'active') {
+      countEl.textContent = `Showing ${visible} result${visible !== 1 ? 's' : ''}`;
     } else {
-      rows[i].style.display = "none";
+      countEl.textContent = '';
     }
-
   }
 }
 
-function filterPizza() {
-
-  const filter = document.getElementById("filterCategory").value;
-  const table = document.getElementById("pizzaTable");
-  const rows = Array.from(table.rows).slice(1);
-
-  // ✅ RESET DISPLAY FIRST
-  rows.forEach(row => row.style.display = "");
-
-  if (filter === "all") return;
-
-  // ✅ FILTER BY CATEGORY
-  if (filter !== "alphabetical") {
-
-    rows.forEach(row => {
-      const category = row.cells[1].textContent;
-
-      if (category !== filter) {
-        row.style.display = "none";
-      }
-    });
-
-  }
-
-  // ✅ SORT ALPHABETICALLY
-  if (filter === "alphabetical") {
-
-    rows.sort((a, b) => {
-      const nameA = a.cells[0].textContent.toLowerCase();
-      const nameB = b.cells[0].textContent.toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
-
-    const tbody = table.tBodies[0];
-
-    rows.forEach(row => tbody.appendChild(row));
-  }
-}
+// Keep old names as aliases so any other code that calls them still works
+function searchPizza() { filterProducts(); }
+function filterPizza()  { filterProducts(); }
 
 function searchUser() {
 
@@ -3230,30 +3415,85 @@ function populateEditUserDOB() {
 }
 
 function confirmDeleteUser(id) {
-
-  const confirmAction = confirm("Are you sure you want to delete this user?");
-
-  if (!confirmAction) {
-    return; // ✅ cancel
-  }
-
-  fetch("delete_user.php", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: "user_id=" + id
-  })
-  .then(res => res.text())
-  .then(() => {
-    // ✅ stay in USERS after reload
-    sessionStorage.setItem("activeSection", "users");
-    location.reload();
-  });
-
+  showAdminConfirm(
+    '👤', '#FEE2E2',
+    'Delete this user?',
+    'The user account will be permanently removed. This action cannot be undone.',
+    'Yes, Delete',
+    '#c62828',
+    () => {
+      fetch("delete_user.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "user_id=" + id
+      })
+      .then(res => res.text())
+      .then(() => {
+        sessionStorage.setItem("activeSection", "users");
+        location.reload();
+      })
+      .catch(err => alert("Network error: " + err));
+    }
+  );
 }
 
 </script>
+
+<!-- ══ ADMIN CONFIRMATION MODAL ══════════════════════════════ -->
+<div id="adminConfirmModal" style="
+  display:none; position:fixed; inset:0; z-index:99999;
+  background:rgba(15,23,42,0.55); align-items:center; justify-content:center;
+  backdrop-filter:blur(6px);">
+  <div style="
+    background:#fff; border-radius:18px; padding:32px 36px;
+    max-width:420px; width:92%; text-align:center;
+    box-shadow:0 24px 60px rgba(0,0,0,0.22);
+    animation:adminPopIn 0.28s cubic-bezier(0.34,1.56,0.64,1);">
+
+    <div id="acmIconWrap" style="
+      width:72px; height:72px; border-radius:50%;
+      margin:0 auto 18px; display:flex;
+      align-items:center; justify-content:center; font-size:32px;">
+    </div>
+
+    <div id="acmTitle" style="
+      font-family:var(--font-main,sans-serif); font-size:18px;
+      font-weight:900; color:#111; margin-bottom:8px; letter-spacing:-0.3px;">
+    </div>
+
+    <div id="acmMsg" style="
+      font-size:14px; color:#555; line-height:1.55;
+      margin-bottom:26px;">
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button id="acmCancelBtn" onclick="closeAdminConfirm()"
+        style="flex:1; max-width:160px; padding:12px 18px; border:none;
+               border-radius:10px; background:#f0f0f0; color:#555;
+               font-family:inherit; font-size:13px; font-weight:700;
+               cursor:pointer; transition:background 0.15s;">
+        Cancel
+      </button>
+      <button id="acmConfirmBtn"
+        style="flex:1; max-width:160px; padding:12px 18px; border:none;
+               border-radius:10px; font-family:inherit; font-size:13px;
+               font-weight:700; cursor:pointer; color:#fff;
+               transition:background 0.15s, transform 0.15s;">
+        Confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes adminPopIn {
+  from { transform:scale(0.85); opacity:0; }
+  to   { transform:scale(1);    opacity:1; }
+}
+#adminConfirmModal.open { display:flex; }
+#acmCancelBtn:hover  { background:#e4e4e4; }
+#acmConfirmBtn:hover { filter:brightness(1.1); transform:translateY(-1px); }
+</style>
 
 <!-- ✅ DASHBOARD CHARTS (Top Selling + Monthly Trend) -->
 <script>
