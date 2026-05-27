@@ -633,7 +633,7 @@ function finalizeOrder() {
 
   const branchSelect = document.getElementById("branch");
   const branch       = branchSelect.value;
-  const branchText   = branchSelect.options[branchSelect.selectedIndex].text;
+  const branchText   = branchSelect.selectedIndex >= 0 ? branchSelect.options[branchSelect.selectedIndex].text : '';
 
   const address      = document.getElementById("address").value.trim();
   const order_type   = document.querySelector('input[name="orderType"]:checked').value;

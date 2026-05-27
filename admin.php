@@ -1617,6 +1617,25 @@ if (isset($_SESSION['user_id'])) {
       color: #bbb;
       font-size: 13px;
     }
+
+    /* ── User search clear button ── */
+    .user-search-wrap { position: relative; }
+    .user-search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 13px;
+      padding: 2px;
+      display: none;
+      transition: color 0.15s;
+    }
+    .user-search-clear:hover { color: #888; }
+    .user-search-wrap input { padding-right: 28px !important; }
   </style>
 
   <div class="users-header">
@@ -1624,16 +1643,18 @@ if (isset($_SESSION['user_id'])) {
     <div class="users-toolbar">
       <div class="user-search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" id="searchUser" placeholder="Search user..." onkeyup="searchUser()">
+        <input type="text" id="searchUser" placeholder="Search by name, email or mobile..." oninput="filterUsers()">
+        <button class="user-search-clear" id="userSearchClearBtn" onclick="clearUserSearch()" title="Clear search">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-      <select class="user-filter" id="filterUser" onchange="filterUser()">
+      <select class="user-filter" id="filterUser" onchange="filterUsers()">
         <option value="all">All Roles</option>
-        <option value="alphabetical">Alphabetical (A-Z)</option>
         <?php
-        $roles = $conn->query("SELECT DISTINCT role FROM users");
+        $roles = $conn->query("SELECT DISTINCT role FROM users ORDER BY role ASC");
         while ($r = $roles->fetch_assoc()) {
           echo "<option value='" . htmlspecialchars($r['role']) . "'>"
-               . htmlspecialchars($r['role']) . "</option>";
+               . ucfirst(htmlspecialchars($r['role'])) . "</option>";
         }
         ?>
       </select>
@@ -1642,6 +1663,9 @@ if (isset($_SESSION['user_id'])) {
       </button>
     </div>
   </div>
+
+  <!-- Result count -->
+  <div id="userResultCount" style="font-size:12px; color:#aaa; margin-bottom:10px; min-height:18px;"></div>
 
   <div class="user-table-wrap">
     <table class="user-table" id="userTable">
@@ -1670,7 +1694,10 @@ if (isset($_SESSION['user_id'])) {
           $pwMasked  = str_repeat('•', min(strlen($u['password']), 10));
           $createdFmt = date('M j, Y', strtotime($u['created_at']));
         ?>
-        <tr>
+        <tr data-username="<?= strtolower(htmlspecialchars($u['username'])) ?>"
+            data-role="<?= strtolower(htmlspecialchars($u['role'])) ?>"
+            data-email="<?= strtolower(htmlspecialchars($u['email'] ?? '')) ?>"
+            data-mobile="<?= htmlspecialchars($u['mobile_number'] ?? '') ?>">
           <!-- User (avatar + name + id) -->
           <td>
             <div class="user-name-cell">
@@ -3029,67 +3056,62 @@ function filterProducts() {
 function searchPizza() { filterProducts(); }
 function filterPizza()  { filterProducts(); }
 
-function searchUser() {
+// ── USERS: unified search + role filter ───────────────────────
+function clearUserSearch() {
+  document.getElementById('searchUser').value = '';
+  document.getElementById('userSearchClearBtn').style.display = 'none';
+  filterUsers();
+}
 
-  const input = document.getElementById("searchUser").value.toLowerCase();
-  const table = document.getElementById("userTable");
-  const rows = table.getElementsByTagName("tr");
+function filterUsers() {
+  const query  = document.getElementById('searchUser').value.trim().toLowerCase();
+  const role   = document.getElementById('filterUser').value;
 
-  for (let i = 1; i < rows.length; i++) {
+  // Show/hide clear button
+  const clearBtn = document.getElementById('userSearchClearBtn');
+  if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
 
-    const nameCell = rows[i].cells[1]; // username column
-    if (!nameCell) continue;
+  const table = document.getElementById('userTable');
+  if (!table) return;
+  const tbody = table.tBodies[0];
+  if (!tbody) return;
+  const rows = Array.from(tbody.rows);
+  let visible = 0;
 
-    const name = nameCell.textContent.toLowerCase();
+  rows.forEach(row => {
+    const username = row.getAttribute('data-username') || '';
+    const rowRole  = row.getAttribute('data-role')     || '';
+    const email    = row.getAttribute('data-email')    || '';
+    const mobile   = row.getAttribute('data-mobile')   || '';
 
-    if (name.includes(input)) {
-      rows[i].style.display = "";
+    // Role filter
+    const roleMatch = role === 'all' || rowRole === role.toLowerCase();
+
+    // Search: matches username, email, or mobile
+    const searchMatch = !query ||
+                        username.includes(query) ||
+                        email.includes(query) ||
+                        mobile.includes(query);
+
+    const show = roleMatch && searchMatch;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  // Result count
+  const countEl = document.getElementById('userResultCount');
+  if (countEl) {
+    if (query || role !== 'all') {
+      countEl.textContent = `Showing ${visible} user${visible !== 1 ? 's' : ''}`;
     } else {
-      rows[i].style.display = "none";
+      countEl.textContent = '';
     }
-
   }
-
 }
 
-function filterUser() {
-
-  const filter = document.getElementById("filterUser").value;
-  const table = document.getElementById("userTable");
-  const rows = Array.from(table.rows).slice(1);
-
-  // ✅ reset first
-  rows.forEach(row => row.style.display = "");
-
-  if (filter === "all") return;
-
-  // ✅ FILTER BY ROLE
-  if (filter !== "alphabetical") {
-
-    rows.forEach(row => {
-      const role = row.cells[3].textContent;
-
-      if (role !== filter) {
-        row.style.display = "none";
-      }
-    });
-
-  }
-
-  // ✅ SORT A-Z by username
-  if (filter === "alphabetical") {
-
-    rows.sort((a, b) => {
-      const nameA = a.cells[1].textContent.toLowerCase();
-      const nameB = b.cells[1].textContent.toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
-
-    const tbody = table.tBodies[0];
-    rows.forEach(row => tbody.appendChild(row));
-  }
-
-}
+// Keep old names as aliases
+function searchUser() { filterUsers(); }
+function filterUser()  { filterUsers(); }
 
 function clearAddUser() {
 

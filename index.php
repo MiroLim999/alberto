@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── Override finalizeOrder for index.php (customer page) ─────
-function finalizeOrder() {
+window.finalizeOrder = function() {
   const table        = document.getElementById('orderTable');
   const customerName = document.getElementById('customerName').value.trim();
   const mobile       = document.getElementById('contact').value.trim();
