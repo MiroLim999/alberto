@@ -2,7 +2,13 @@
 session_start();
 include "db_connect.php";
 
-// Fetch pending orders
+// ── Role guard: cashier only ──────────────────
+if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'cashier') {
+    header("Location: login.php");
+    exit;
+}
+
+// Fetch pending orders (JOIN branches to avoid N+1 query)
 $ordersQuery = "
     SELECT
         o.order_id, o.branch_id, o.address, o.order_type,
@@ -13,10 +19,13 @@ $ordersQuery = "
         (SELECT SUM(oi.quantity * pv.price)
          FROM order_items oi
          JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
-         WHERE oi.order_id = o.order_id)            AS total_amount
+         WHERE oi.order_id = o.order_id)            AS total_amount,
+        b.branch_name,
+        b.location AS branch_location
     FROM orders o
-    LEFT JOIN users          u  ON o.user_id  = u.user_id
-    LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+    LEFT JOIN users          u  ON o.user_id   = u.user_id
+    LEFT JOIN order_contacts oc ON o.order_id  = oc.order_id
+    LEFT JOIN branches       b  ON o.branch_id = b.branch_id
     WHERE o.status = 'pending'
     ORDER BY o.created_at DESC
 ";
@@ -600,6 +609,25 @@ $menuResult = $conn->query($menuQuery);
       40%,80%  { transform: translateX(5px); }
     }
 
+    /* Process modal calculator buttons */
+    .pcalc-btn {
+      padding: 10px 0;
+      background: #fff;
+      border: 1.5px solid #DCE775;
+      border-radius: 6px;
+      font-family: var(--font-main);
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-dark);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.12s;
+    }
+    .pcalc-btn:hover {
+      background: #F9FBE7;
+      transform: translateY(-1px);
+    }
+    .pcalc-btn:active { transform: scale(0.95); }
+
   </style>
 </head>
 
@@ -643,11 +671,6 @@ $menuResult = $conn->query($menuQuery);
       $hasOrders = false;
       while ($order = $ordersResult->fetch_assoc()):
         $hasOrders = true;
-
-        $branch_id    = $order['branch_id'];
-        $branchQuery  = "SELECT * FROM branches WHERE branch_id = '$branch_id'";
-        $branchResult = $conn->query($branchQuery);
-        $branchData   = $branchResult->fetch_assoc();
       ?>
 
       <div class="pending-card">
@@ -662,8 +685,8 @@ $menuResult = $conn->query($menuQuery);
 
         <hr>
 
-        <p><strong>Branch:</strong> <?= htmlspecialchars($branchData['branch_name'] . ', ' . $branchData['location']); ?></p>
-        <?php if ($order['address']): ?>
+        <p><strong>Branch:</strong> <?= htmlspecialchars($order['branch_name'] . ', ' . $order['branch_location']); ?></p>
+        <?php if ($order['address'] && $order['address'] !== '0'): ?>
           <p><strong>Address:</strong> <?= htmlspecialchars($order['address']); ?></p>
         <?php endif; ?>
         <p><strong>Type:</strong> <?= htmlspecialchars($order['order_type']); ?></p>
@@ -676,8 +699,8 @@ $menuResult = $conn->query($menuQuery);
            &nbsp;<small style="color:var(--text-light); font-size:11px;"><?= date('M d, g:i A', strtotime($order['created_at'])); ?></small></p>
 
         <div class="pending-actions">
-          <button onclick="cancelPendingOrder(<?= $order['order_id']; ?>)">CANCEL</button>
-          <button onclick="processOrder(<?= $order['order_id']; ?>)">PROCESS</button>
+          <button onclick="confirmCancelPending(<?= $order['order_id']; ?>, '<?= htmlspecialchars(addslashes($order['customer_name'])) ?>')">CANCEL</button>
+          <button onclick="confirmProcessOrder(<?= $order['order_id']; ?>, '<?= htmlspecialchars(addslashes($order['customer_name'])) ?>')">PROCESS</button>
         </div>
 
       </div>
@@ -937,6 +960,121 @@ $menuResult = $conn->query($menuQuery);
   </div>
 </div>
 
+<!-- CONFIRMATION MODAL (Cancel pending order / Cancel current order) -->
+<div id="confirmModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; backdrop-filter:blur(3px);">
+  <div style="background:#fff; border-radius:14px; padding:28px 32px; max-width:400px; width:90%; box-shadow:0 12px 48px rgba(0,0,0,0.18); text-align:center; animation:popIn 0.25s ease;">
+    <span id="confirmIcon"  style="font-size:44px; display:block; margin-bottom:12px;"></span>
+    <div id="confirmTitle"  style="font-family:var(--font-main); font-size:17px; font-weight:900; color:var(--text-dark); margin-bottom:8px;"></div>
+    <div id="confirmMsg"    style="font-size:13px; color:var(--text-mid); line-height:1.6; margin-bottom:22px;"></div>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button id="confirmNo"  onclick="closeConfirmModal()"
+        style="padding:10px 22px; border:none; border-radius:8px; background:#f0f0f0; color:#555; font-family:var(--font-main); font-size:13px; font-weight:800; cursor:pointer;">
+        No, Go Back
+      </button>
+      <button id="confirmYes"
+        style="padding:10px 22px; border:none; border-radius:8px; font-family:var(--font-main); font-size:13px; font-weight:800; cursor:pointer; color:#fff;">
+        Confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PROCESS ORDER MODAL (shows order details + cashier payment) -->
+<div id="processOrderModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; backdrop-filter:blur(3px); overflow-y:auto; padding:20px 0;">
+  <div style="background:#fff; border-radius:14px; padding:28px 32px; max-width:620px; width:92%; box-shadow:0 12px 48px rgba(0,0,0,0.22); animation:popIn 0.25s ease; margin:auto;">
+
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h2 style="font-family:var(--font-main); font-size:18px; font-weight:900; color:var(--text-dark); margin:0;">📋 Process Order</h2>
+      <button onclick="closeProcessModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:var(--text-light);">&times;</button>
+    </div>
+
+    <!-- Customer & Order Info -->
+    <div id="processOrderInfo" style="font-size:13px; color:var(--text-mid); line-height:1.8; margin-bottom:14px;"></div>
+
+    <hr style="border:none; border-top:1.5px solid var(--border); margin:12px 0;">
+
+    <!-- Items Table -->
+    <h4 style="font-family:var(--font-main); font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-mid); margin-bottom:8px;">Order Items</h4>
+    <div style="overflow-x:auto;">
+      <table id="processItemsTable" style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr style="background:#f8f8f8;">
+            <th style="padding:8px 10px; text-align:left; border-bottom:2px solid var(--border);">Pizza</th>
+            <th style="padding:8px 6px; text-align:center; border-bottom:2px solid var(--border);">Size</th>
+            <th style="padding:8px 6px; text-align:center; border-bottom:2px solid var(--border);">Cheese</th>
+            <th style="padding:8px 6px; text-align:center; border-bottom:2px solid var(--border);">Price</th>
+            <th style="padding:8px 6px; text-align:center; border-bottom:2px solid var(--border);">Qty</th>
+            <th style="padding:8px 6px; text-align:right; border-bottom:2px solid var(--border);">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="processItemsBody"></tbody>
+      </table>
+    </div>
+
+    <hr style="border:none; border-top:1.5px solid var(--border); margin:14px 0;">
+
+    <!-- Payment Section -->
+    <div style="background:#F9FBE7; border:1.5px solid #DCE775; border-radius:10px; padding:16px; margin-top:4px;">
+      <h4 style="font-family:var(--font-main); font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#558B2F; margin:0 0 12px 0;">💰 Payment</h4>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div>
+          <label style="display:block; font-size:11px; font-weight:700; color:var(--text-mid); margin-bottom:4px;">Total Amount</label>
+          <input type="text" id="processTotal" readonly style="width:100%; padding:9px 12px; border:1.5px solid #DCE775; border-radius:6px; font-family:var(--font-main); font-size:15px; font-weight:800; background:#F1F8E9; color:#558B2F;">
+        </div>
+        <div>
+          <label style="display:block; font-size:11px; font-weight:700; color:var(--text-mid); margin-bottom:4px;">Payment Method</label>
+          <input type="text" id="processPaymentMethod" readonly style="width:100%; padding:9px 12px; border:1.5px solid #DCE775; border-radius:6px; font-size:13px; background:#F1F8E9; color:var(--text-mid);">
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-mid); margin-bottom:4px;">Amount Received</label>
+        <input type="text" id="processAmountReceived" placeholder="Enter amount received" oninput="processCalcChange()"
+          style="width:100%; padding:10px 12px; border:1.5px solid #DCE775; border-radius:6px; font-family:var(--font-body); font-size:14px; outline:none; transition:border-color 0.18s;">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+        <div>
+          <label style="display:block; font-size:11px; font-weight:700; color:var(--text-mid); margin-bottom:4px;">Change</label>
+          <input type="text" id="processChange" readonly style="width:100%; padding:9px 12px; border:1.5px solid #DCE775; border-radius:6px; font-family:var(--font-main); font-size:14px; font-weight:800; background:#F1F8E9;">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button onclick="processCalcClear()" style="padding:9px 14px; border:1.5px solid #DCE775; border-radius:6px; background:#fff; font-size:12px; font-weight:700; cursor:pointer; margin-right:6px;">C</button>
+          <button onclick="processCalcDel()" style="padding:9px 14px; border:1.5px solid #DCE775; border-radius:6px; background:#fff; font-size:12px; font-weight:700; cursor:pointer;">⌫</button>
+        </div>
+      </div>
+
+      <!-- Mini calculator -->
+      <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-top:12px;">
+        <button onclick="processCalcKey('1')" class="pcalc-btn">1</button>
+        <button onclick="processCalcKey('2')" class="pcalc-btn">2</button>
+        <button onclick="processCalcKey('3')" class="pcalc-btn">3</button>
+        <button onclick="processCalcKey('4')" class="pcalc-btn">4</button>
+        <button onclick="processCalcKey('5')" class="pcalc-btn">5</button>
+        <button onclick="processCalcKey('6')" class="pcalc-btn">6</button>
+        <button onclick="processCalcKey('7')" class="pcalc-btn">7</button>
+        <button onclick="processCalcKey('8')" class="pcalc-btn">8</button>
+        <button onclick="processCalcKey('9')" class="pcalc-btn">9</button>
+        <button onclick="processCalcKey('0')" class="pcalc-btn">0</button>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex; gap:10px; margin-top:18px; justify-content:flex-end;">
+      <button onclick="closeProcessModal()" style="padding:11px 22px; border:none; border-radius:8px; background:#f0f0f0; color:#555; font-family:var(--font-main); font-size:13px; font-weight:800; cursor:pointer;">
+        Cancel
+      </button>
+      <button id="processCompleteBtn" onclick="completeProcessOrder()" disabled
+        style="padding:11px 24px; border:none; border-radius:8px; background:var(--orange); color:#fff; font-family:var(--font-main); font-size:13px; font-weight:800; cursor:pointer; box-shadow:0 3px 10px rgba(255,107,0,0.3); transition:background 0.15s, transform 0.15s;">
+        ✅ Complete Order
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <script src="js/home.js"></script>
 
 <script>
@@ -1009,6 +1147,265 @@ function closeValidationModal() {
 document.getElementById('validationModal').addEventListener('click', function(e) {
   if (e.target === this) closeValidationModal();
 });
+
+// ══════════════════════════════════════════════════════════════
+//  CONFIRMATION MODAL (generic reusable)
+// ══════════════════════════════════════════════════════════════
+let _confirmCallback = null;
+
+function showConfirmModal(icon, title, msg, yesLabel, yesColor, callback) {
+  document.getElementById('confirmIcon').textContent  = icon;
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent   = msg;
+  const yesBtn = document.getElementById('confirmYes');
+  yesBtn.textContent       = yesLabel;
+  yesBtn.style.background  = yesColor;
+  // Skip box-shadow when using CSS variables (they don't concat well)
+  yesBtn.style.boxShadow   = yesColor.startsWith('var(') ? '0 3px 10px rgba(0,0,0,0.15)' : `0 3px 10px ${yesColor}55`;
+  _confirmCallback = callback;
+  const modal = document.getElementById('confirmModal');
+  modal.style.display = 'flex';
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModal').style.display = 'none';
+  _confirmCallback = null;
+}
+
+document.getElementById('confirmYes').addEventListener('click', function() {
+  // ✅ Capture the callback BEFORE closing (closeConfirmModal nulls it)
+  const cb = _confirmCallback;
+  document.getElementById('confirmModal').style.display = 'none';
+  _confirmCallback = null;
+  if (typeof cb === 'function') cb();
+});
+
+document.getElementById('confirmModal').addEventListener('click', function(e) {
+  if (e.target === this) closeConfirmModal();
+});
+
+// ── CANCEL PENDING ORDER (with confirmation) ──────────────────
+function confirmCancelPending(orderId, customerName) {
+  showConfirmModal(
+    '🗑️',
+    'Cancel Order?',
+    `Cancel order #${orderId} for ${customerName}? This cannot be undone.`,
+    'Yes, Cancel Order',
+    '#c62828',
+    () => doCancelPendingOrder(orderId)
+  );
+}
+
+function doCancelPendingOrder(orderId) {
+  fetch('cancel_order.php', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    `order_id=${orderId}`,
+  })
+  .then(res => res.text())
+  .then(data => {
+    if (data.trim() === 'success') {
+      showToast('success', 'Order Cancelled', `Order #${orderId} has been cancelled.`);
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('error', 'Cancel Failed', 'Could not cancel the order. Please try again.');
+    }
+  })
+  .catch(() => showToast('error', 'Network Error', 'Could not reach the server.'));
+}
+
+// ── PROCESS PENDING ORDER (opens full modal with order details + payment) ──
+let _processOrderData = null; // holds { order, items } for the modal
+
+function confirmProcessOrder(orderId, customerName) {
+  // First check stock, then open the process modal
+  fetch(`check_stock.php?order_id=${orderId}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'error') {
+        showToast('error', 'Error', data.message || 'Could not load order.');
+        return;
+      }
+      if (data.status === 'out_of_stock') {
+        showOutOfStockModal(data.order, data.items, data.out_of_stock);
+        return;
+      }
+      // Stock OK → open process modal
+      _processOrderData = { order: data.order, items: data.items, orderId: orderId };
+      openProcessModal(data.order, data.items);
+    })
+    .catch(() => showToast('error', 'Network Error', 'Could not reach the server.'));
+}
+
+function openProcessModal(order, items) {
+  // ── Fill customer/order info ──
+  const infoHtml = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 20px;">
+      <p><strong>Order ID:</strong> #${order.order_id}</p>
+      <p><strong>Status:</strong> <span style="color:var(--amber); font-weight:700; text-transform:uppercase;">${order.status}</span></p>
+      <p><strong>Customer:</strong> ${order.customer_name}</p>
+      <p><strong>Mobile:</strong> ${order.mobile_number}</p>
+      <p><strong>Email:</strong> ${order.email || '—'}</p>
+      <p><strong>Order Type:</strong> ${order.order_type}</p>
+      ${order.address && order.address !== '0' ? `<p><strong>Address:</strong> ${order.address}</p>` : ''}
+      <p><strong>Date:</strong> ${order.created_at}</p>
+    </div>
+  `;
+  document.getElementById('processOrderInfo').innerHTML = infoHtml;
+
+  // ── Fill items table ──
+  let rowsHtml = '';
+  let total = 0;
+  items.forEach(item => {
+    const subtotal = parseFloat(item.total);
+    total += subtotal;
+    rowsHtml += `
+      <tr>
+        <td style="padding:7px 10px; border-bottom:1px solid #eee;">${item.pizza_name}</td>
+        <td style="padding:7px 6px; text-align:center; border-bottom:1px solid #eee;">${item.size}"</td>
+        <td style="padding:7px 6px; text-align:center; border-bottom:1px solid #eee;">${item.cheese}</td>
+        <td style="padding:7px 6px; text-align:center; border-bottom:1px solid #eee;">₱${parseFloat(item.price).toFixed(2)}</td>
+        <td style="padding:7px 6px; text-align:center; border-bottom:1px solid #eee;">${item.quantity}</td>
+        <td style="padding:7px 6px; text-align:right; border-bottom:1px solid #eee; font-weight:700;">₱${subtotal.toFixed(2)}</td>
+      </tr>
+    `;
+  });
+  // Total row
+  rowsHtml += `
+    <tr style="background:#f8f8f8;">
+      <td colspan="5" style="padding:9px 10px; font-weight:800; text-align:right; border-top:2px solid var(--border);">TOTAL</td>
+      <td style="padding:9px 6px; text-align:right; font-weight:900; font-size:14px; border-top:2px solid var(--border);">₱${total.toFixed(2)}</td>
+    </tr>
+  `;
+  document.getElementById('processItemsBody').innerHTML = rowsHtml;
+
+  // ── Fill payment info ──
+  document.getElementById('processTotal').value = '₱' + total.toFixed(2);
+  document.getElementById('processPaymentMethod').value = order.payment_method;
+  document.getElementById('processAmountReceived').value = '';
+  document.getElementById('processChange').value = '';
+  document.getElementById('processChange').style.color = '';
+  document.getElementById('processCompleteBtn').disabled = true;
+
+  // ── If payment is ONLINE, auto-fill and enable ──
+  if (order.payment_method === 'ONLINE') {
+    document.getElementById('processAmountReceived').value = total.toFixed(2);
+    document.getElementById('processChange').value = '₱0.00';
+    document.getElementById('processChange').style.color = 'green';
+    document.getElementById('processCompleteBtn').disabled = false;
+  }
+
+  // Show modal
+  document.getElementById('processOrderModal').style.display = 'flex';
+}
+
+function closeProcessModal() {
+  document.getElementById('processOrderModal').style.display = 'none';
+  _processOrderData = null;
+}
+
+// Close on backdrop click
+document.getElementById('processOrderModal').addEventListener('click', function(e) {
+  if (e.target === this) closeProcessModal();
+});
+
+// ── Process modal calculator helpers ──
+function processCalcKey(val) {
+  const input = document.getElementById('processAmountReceived');
+  if (val === '.' && input.value.includes('.')) return;
+  input.value += val;
+  processCalcChange();
+}
+function processCalcClear() {
+  document.getElementById('processAmountReceived').value = '';
+  processCalcChange();
+}
+function processCalcDel() {
+  const input = document.getElementById('processAmountReceived');
+  input.value = input.value.slice(0, -1);
+  processCalcChange();
+}
+function processCalcChange() {
+  const input = document.getElementById('processAmountReceived');
+  // Sanitize
+  input.value = input.value.replace(/[^0-9.]/g, '');
+  const parts = input.value.split('.');
+  if (parts.length > 2) input.value = parts[0] + '.' + parts.slice(1).join('');
+
+  if (!_processOrderData) return;
+  const total = parseFloat(_processOrderData.order.total_amount) || 0;
+  const received = parseFloat(input.value) || 0;
+  const change = received - total;
+  const changeEl = document.getElementById('processChange');
+  const btn = document.getElementById('processCompleteBtn');
+
+  if (received === 0 || change < 0) {
+    changeEl.value = received === 0 ? '' : 'Insufficient';
+    changeEl.style.color = 'red';
+    btn.disabled = true;
+  } else {
+    changeEl.value = '₱' + change.toFixed(2);
+    changeEl.style.color = 'green';
+    btn.disabled = false;
+  }
+}
+
+// ── Complete the processed order ──
+function completeProcessOrder() {
+  if (!_processOrderData) return;
+  const orderId = _processOrderData.orderId;
+  const btn = document.getElementById('processCompleteBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  fetch('complete_order.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `order_id=${orderId}`,
+  })
+  .then(res => res.text())
+  .then(data => {
+    if (data.trim() === 'success') {
+      closeProcessModal();
+      showToast('success', 'Order Completed', `Order #${orderId} has been marked as completed.`, 4000);
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('error', 'Failed', 'Could not complete the order. Try again.');
+      btn.disabled = false;
+      btn.textContent = '✅ Complete Order';
+    }
+  })
+  .catch(() => {
+    showToast('error', 'Network Error', 'Could not reach the server.');
+    btn.disabled = false;
+    btn.textContent = '✅ Complete Order';
+  });
+}
+
+// ── CANCEL CURRENT ORDER FORM (with confirmation) ─────────────
+// Override the generic cancelOrder from home.js with a modal version.
+// IMPORTANT: must use IIFE + window.cancelOrder assignment, because a
+// `function cancelOrder()` declaration would be hoisted and shadow the
+// home.js version, making _originalCancelOrder a self-reference (infinite loop).
+(function() {
+  const _originalCancelOrder = window.cancelOrder;
+  window.cancelOrder = function() {
+    const table = document.getElementById('orderTable');
+    // Only ask if there's something to lose
+    if (table && table.rows.length > 1) {
+      showConfirmModal(
+        '⚠️',
+        'Clear Order?',
+        'This will clear all items and customer info from the current order. Are you sure?',
+        'Yes, Clear',
+        '#c05000',
+        () => _originalCancelOrder()
+      );
+    } else {
+      _originalCancelOrder();
+    }
+  };
+})();
 
 // ══════════════════════════════════════════════════════════════
 //  FIELD HIGHLIGHT HELPER
