@@ -1132,42 +1132,25 @@ function calculateChange() {
   const total = parseFloat(document.getElementById("totalAmount").value) || 0;
   const received = parseFloat(document.getElementById("amountReceived").value) || 0;
 
-  document.getElementById("cashierTotal").value = "₱" + total.toFixed(2);
+  const cashierTotalEl = document.getElementById("cashierTotal");
+  if (cashierTotalEl) cashierTotalEl.value = "₱" + total.toFixed(2);
 
   const change = received - total;
-
-  const finalizeBtn = document.getElementById("finalizeBtn");
+  const changeEl = document.getElementById("changeAmount");
 
   if (change < 0 || received === 0) {
-    document.getElementById("changeAmount").value = "Insufficient";
-
-    
-// ✅ VISUAL WARNING (RED)
-  document.getElementById("changeAmount").style.color = "red";
-
-    
-    // ✅ DISABLE FINALIZE
-    if (finalizeBtn) finalizeBtn.disabled = true;
-
+    if (changeEl) {
+      changeEl.value = received === 0 ? "" : "Insufficient";
+      changeEl.style.color = "red";
+    }
   } else {
-    document.getElementById("changeAmount").value = "₱" + change.toFixed(2);
-    
-    
-// ✅ RESET COLOR (NORMAL)
-  document.getElementById("changeAmount").style.color = "green";
-
-    // ✅ ENABLE FINALIZE
-    if (finalizeBtn) finalizeBtn.disabled = false;
+    if (changeEl) {
+      changeEl.value = "₱" + change.toFixed(2);
+      changeEl.style.color = "green";
+    }
   }
 
-  
-//const finalizeBtn = document.getElementById("finalizeBtn");
-
-if (received < total || total === 0) {
-  finalizeBtn.disabled = true;
-} else {
-  finalizeBtn.disabled = false;
-}
-
-
+  // ✅ Don't disable the finalize button here — let checkFinalizeBtn()
+  // handle button state, and let finalizeOrder() do the actual validation
+  // with proper toast/modal error messages.
 }

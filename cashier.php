@@ -1458,7 +1458,7 @@ document.addEventListener('DOMContentLoaded', updateAddressLabel);
 //  Replaces the generic home.js finalizeOrder with full
 //  validation + toast/modal error handling for cashier.php
 // ══════════════════════════════════════════════════════════════
-function finalizeOrder() {
+window.finalizeOrder = function() {
 
   const table        = document.getElementById('orderTable');
   const customerName = document.getElementById('customerName').value.trim();
@@ -1620,5 +1620,5 @@ function finalizeOrder() {
     btn.disabled    = false;
     btn.textContent = 'FINALIZE';
   });
-}
+};
 </script>
