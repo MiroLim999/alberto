@@ -918,6 +918,7 @@ if (isset($_SESSION['user_id'])) {
                    p.stock, p.image_path
             FROM pizzas p
             JOIN categories c ON p.category_id = c.category_id
+            WHERE p.deleted_at IS NULL
         ");
         while ($row = $result->fetch_assoc()):
           $stock = (int)$row['stock'];
@@ -962,6 +963,82 @@ if (isset($_SESSION['user_id'])) {
         <?php endwhile; ?>
       </tbody>
     </table>
+  </div>
+
+  <!-- ── ARCHIVED PIZZAS ─────────────────────────── -->
+  <?php
+  $archivedResult = $conn->query("
+      SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
+             p.stock, p.image_path, p.deleted_at
+      FROM pizzas p
+      JOIN categories c ON p.category_id = c.category_id
+      WHERE p.deleted_at IS NOT NULL
+      ORDER BY p.deleted_at DESC
+  ");
+  $archivedCount = $archivedResult->num_rows;
+  ?>
+
+  <div style="margin-top:32px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <h3 style="font-size:15px; font-weight:800; color:#555; margin:0;">
+          🗄️ Archived Products
+        </h3>
+        <span style="background:#f0f0f0; color:#888; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px;">
+          <?= $archivedCount ?> item<?= $archivedCount !== 1 ? 's' : '' ?>
+        </span>
+      </div>
+      <?php if ($archivedCount > 0): ?>
+        <span style="font-size:12px; color:#aaa; font-style:italic;">
+          Archived pizzas are hidden from the menu. Restore to make them available again.
+        </span>
+      <?php endif; ?>
+    </div>
+
+    <?php if ($archivedCount === 0): ?>
+      <div style="background:#fafafa; border:1.5px dashed #e0e0e0; border-radius:10px; padding:28px; text-align:center; color:#bbb; font-size:13px;">
+        No archived products.
+      </div>
+    <?php else: ?>
+      <div class="pizza-table-wrap">
+        <table class="pizza-table">
+          <thead>
+            <tr>
+              <th>Pizza Name</th>
+              <th>Category</th>
+              <th>Stock</th>
+              <th>Archived On</th>
+              <th style="text-align:center;">Restore</th>
+              <th style="text-align:center;">Delete Permanently</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php while ($row = $archivedResult->fetch_assoc()): ?>
+            <tr style="opacity:0.75;">
+              <td class="pizza-name-cell" style="color:#888;"><?= htmlspecialchars($row['pizza_name']) ?></td>
+              <td><span class="pizza-category-pill" style="background:#f5f5f5; color:#aaa;"><?= htmlspecialchars($row['category']) ?></span></td>
+              <td><span class="stock-badge" style="background:#f5f5f5; color:#aaa;"><?= (int)$row['stock'] ?></span></td>
+              <td style="font-size:12px; color:#aaa;"><?= date('M d, Y g:i A', strtotime($row['deleted_at'])) ?></td>
+              <td style="text-align:center;">
+                <button class="tbl-action-btn" style="background:#e8f8ee; color:#2e7d50;"
+                  onclick="restorePizza(<?= $row['pizza_id'] ?>, '<?= htmlspecialchars(addslashes($row['pizza_name'])) ?>')"
+                  title="Restore">
+                  <i class="fa-solid fa-rotate-left"></i>
+                </button>
+              </td>
+              <td style="text-align:center;">
+                <button class="tbl-action-btn tbl-btn-delete"
+                  onclick="permanentDelete(<?= $row['pizza_id'] ?>, '<?= htmlspecialchars(addslashes($row['pizza_name'])) ?>')"
+                  title="Delete Permanently">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+            <?php endwhile; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
   </div>
 
 </div>
@@ -2523,24 +2600,66 @@ function confirmDelete(id) {
   const confirmAction = confirm("Are you sure you want to delete this product?");
 
   if (!confirmAction) {
-    return; // ✅ user clicked NO
+    return; // user clicked NO
   }
 
-  // ✅ proceed delete
   fetch("delete_pizza.php", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "pizza_id=" + id
   })
   .then(res => res.text())
-  .then(() => {
-    // ✅ stay in products tab after delete
-    sessionStorage.setItem("activeSection", "products");
-    location.reload();
-  });
+  .then(data => {
+    if (data.trim() === "success") {
+      sessionStorage.setItem("activeSection", "products");
+      location.reload();
+    } else {
+      alert("Delete failed: " + data.trim());
+    }
+  })
+  .catch(err => alert("Network error: " + err));
 
+}
+
+function restorePizza(id, name) {
+  if (!confirm(`Restore "${name}"? It will become visible on the menu again.`)) return;
+
+  fetch("restore_pizza.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "pizza_id=" + id
+  })
+  .then(res => res.text())
+  .then(data => {
+    if (data.trim() === "success") {
+      sessionStorage.setItem("activeSection", "products");
+      location.reload();
+    } else {
+      alert("Restore failed: " + data.trim());
+    }
+  })
+  .catch(err => alert("Network error: " + err));
+}
+
+function permanentDelete(id, name) {
+  if (!confirm(`⚠️ Permanently delete "${name}"?\n\nThis CANNOT be undone. All pizza data will be removed from the database.`)) return;
+  if (!confirm(`Are you absolutely sure? This will permanently delete "${name}".`)) return;
+
+  fetch("permanent_delete_pizza.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "pizza_id=" + id
+  })
+  .then(res => res.text())
+  .then(data => {
+    if (data.trim() === "success") {
+      sessionStorage.setItem("activeSection", "products");
+      location.reload();
+    } else {
+      alert("Permanent delete failed: " + data.trim());
+    }
+  })
+  .catch(err => alert("Network error: " + err));
 }
 
 function resetAddPizza() {

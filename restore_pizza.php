@@ -12,9 +12,8 @@ if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'adm
 $id = intval($_POST['pizza_id'] ?? 0);
 if (!$id) { echo "error: invalid id"; exit; }
 
-// Soft delete — set deleted_at timestamp instead of removing the row.
-// This preserves order history and allows restore from archive.
-$stmt = $conn->prepare("UPDATE pizzas SET deleted_at = NOW() WHERE pizza_id = ? AND deleted_at IS NULL");
+// Restore — clear the deleted_at timestamp
+$stmt = $conn->prepare("UPDATE pizzas SET deleted_at = NULL WHERE pizza_id = ? AND deleted_at IS NOT NULL");
 $stmt->bind_param("i", $id);
 echo $stmt->execute() && $stmt->affected_rows > 0 ? "success" : "error: " . $stmt->error;
 $stmt->close();

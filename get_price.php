@@ -12,6 +12,7 @@ $sql = "
   WHERE p.pizza_name = ?
   AND pv.size = ?
   AND pv.cheese = ?
+  AND p.deleted_at IS NULL
   LIMIT 1
 ";
 

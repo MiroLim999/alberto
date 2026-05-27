@@ -133,7 +133,7 @@ CREATE TABLE `order_items` (
   KEY `fk_item_order` (`order_id`),
   KEY `fk_item_variant` (`variant_id`),
   CONSTRAINT `fk_item_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`order_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_item_variant` FOREIGN KEY (`variant_id`) REFERENCES `pizza_variants` (`variant_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT `fk_item_variant` FOREIGN KEY (`variant_id`) REFERENCES `pizza_variants` (`variant_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=210 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

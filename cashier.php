@@ -59,6 +59,7 @@ $menuQuery = "
          WHERE pi.pizza_id = p.pizza_id) AS ingredients
     FROM pizzas p
     JOIN categories c ON p.category_id = c.category_id
+    WHERE p.deleted_at IS NULL
     ORDER BY c.category_name, p.pizza_name
 ";
 $menuResult = $conn->query($menuQuery);
@@ -771,6 +772,7 @@ $menuResult = $conn->query($menuQuery);
       $pizzaDropdownResult = $conn->query("
         SELECT pizza_name, MAX(stock) AS stock
         FROM pizzas
+        WHERE deleted_at IS NULL
         GROUP BY pizza_name
         ORDER BY pizza_name
       ");
