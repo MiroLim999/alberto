@@ -13,49 +13,53 @@ $sql = "SELECT * FROM users WHERE user_id = '$user_id' LIMIT 1";
 $result = $conn->query($sql);
 $user = $result->fetch_assoc();
 
+// ── Guard: user must exist ────────────────────────────────────
+if (!$user) {
+    session_destroy();
+    header("Location: login.php");
+    exit;
+}
+
 // ✅ SAVE CHANGES
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
-  $username = $_POST['username'];
-  $password = $_POST['password'];
-  $mobile   = $_POST['mobile'];
-  $email    = $_POST['email'];
-  $gender   = $_POST['gender'];
+    $username = trim($_POST['username'] ?? '');
+    $password = trim($_POST['password'] ?? '');
+    $mobile   = trim($_POST['mobile']   ?? '');
+    $email    = trim($_POST['email']    ?? '');
+    $gender   = $_POST['gender']        ?? '';
+    $month    = str_pad($_POST['month'] ?? '', 2, '0', STR_PAD_LEFT);
+    $day      = str_pad($_POST['day']   ?? '', 2, '0', STR_PAD_LEFT);
+    $year     = $_POST['year']          ?? '';
+    $birth_date = "$year-$month-$day";
 
-  $month = $_POST['month'];
-  $day   = $_POST['day'];
-  $year  = $_POST['year'];
+    // ── Prepared statement — no SQL injection ─────────────────
+    $stmt = $conn->prepare("
+        UPDATE users SET
+            username      = ?,
+            password      = ?,
+            mobile_number = ?,
+            email         = ?,
+            gender        = ?,
+            birth_date    = ?
+        WHERE user_id = ?
+    ");
+    $stmt->bind_param("ssssssi", $username, $password, $mobile, $email, $gender, $birth_date, $user_id);
 
-  $birth_date = "$year-$month-$day";
-
-  $update_sql = "
-    UPDATE users SET
-      username = '$username',
-      password = '$password',
-      mobile_number = '$mobile',
-      email = '$email',
-      gender = '$gender',
-      birth_date = '$birth_date'
-    WHERE user_id = '$user_id'
-  ";
-
-  if ($conn->query($update_sql)) {
-    $_SESSION['username'] = $username;
-    header("Location: profile_customer.php");
-    exit;
-  } else {
-    echo "Error updating profile.";
-  }
+    if ($stmt->execute()) {
+        $_SESSION['username'] = $username;
+        $stmt->close();
+        header("Location: profile_customer.php");
+        exit;
+    } else {
+        echo "Error updating profile: " . $stmt->error;
+        $stmt->close();
+    }
 }
 
 $birthMonth = date('n', strtotime($user['birth_date']));
 $birthDay   = date('j', strtotime($user['birth_date']));
 $birthYear  = date('Y', strtotime($user['birth_date']));
-
-if (!$user) {
-  echo "User not found.";
-  exit;
-}
 
 $field = isset($_GET['field']) ? $_GET['field'] : '';
 ?>

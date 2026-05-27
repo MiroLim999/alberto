@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 
 // ── Role guard: admin only ────────────────
@@ -20,25 +20,31 @@ $user_name = "Admin";
 
 // ── SALES ──────────────────────────────────
 $dailySales = $conn->query("
-  SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM v_orders_full
-  WHERE status = 'completed'
-    AND DATE(created_at) = CURDATE()
+  SELECT COALESCE(SUM(oi.quantity * pv.price), 0) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status = 'completed'
+    AND DATE(o.created_at) = CURDATE()
 ")->fetch_assoc()['total'];
 
 $monthlySales = $conn->query("
-  SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM v_orders_full
-  WHERE status = 'completed'
-    AND MONTH(created_at) = MONTH(CURDATE())
-    AND YEAR(created_at)  = YEAR(CURDATE())
+  SELECT COALESCE(SUM(oi.quantity * pv.price), 0) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status = 'completed'
+    AND MONTH(o.created_at) = MONTH(CURDATE())
+    AND YEAR(o.created_at)  = YEAR(CURDATE())
 ")->fetch_assoc()['total'];
 
 $yearlySales = $conn->query("
-  SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM v_orders_full
-  WHERE status = 'completed'
-    AND YEAR(created_at) = YEAR(CURDATE())
+  SELECT COALESCE(SUM(oi.quantity * pv.price), 0) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status = 'completed'
+    AND YEAR(o.created_at) = YEAR(CURDATE())
 ")->fetch_assoc()['total'];
 
 // ── ORDERS ─────────────────────────────────
@@ -53,20 +59,23 @@ $goodStock     = $conn->query("SELECT COUNT(*) AS c FROM pizzas WHERE stock >= 1
 
 // ── LOW STOCK PIZZAS (for inventory table) ──
 $lowStockPizzas = $conn->query("
-  SELECT pizza_name, category, stock
-  FROM v_pizzas_full
-  WHERE stock < 10
-  ORDER BY stock ASC
+  SELECT p.pizza_name, c.category_name AS category, p.stock
+  FROM pizzas p
+  JOIN categories c ON p.category_id = c.category_id
+  WHERE p.stock < 10
+  ORDER BY p.stock ASC
   LIMIT 10
 ");
 
 // ── TOP SELLING PIZZAS (for bar chart) ──
 $topPizzas = $conn->query("
-  SELECT oi.pizza_name, SUM(oi.quantity) AS total_sold
-  FROM v_order_items_full oi
+  SELECT p.pizza_name, SUM(oi.quantity) AS total_sold
+  FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  JOIN pizzas p ON pv.pizza_id = p.pizza_id
   WHERE o.status = 'completed'
-  GROUP BY oi.pizza_name
+  GROUP BY p.pizza_id, p.pizza_name
   ORDER BY total_sold DESC
   LIMIT 10
 ");
@@ -80,13 +89,15 @@ while ($row = $topPizzas->fetch_assoc()) {
 
 // ── MONTHLY SALES TREND (last 6 months) ──
 $monthlySalesTrend = $conn->query("
-  SELECT DATE_FORMAT(created_at, '%b %Y') AS month_label,
-         MONTH(created_at) AS month_num,
-         YEAR(created_at)  AS year_num,
-         SUM(total_amount) AS total
-  FROM v_orders_full
-  WHERE status = 'completed'
-    AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+  SELECT DATE_FORMAT(o.created_at, '%b %Y') AS month_label,
+         MONTH(o.created_at) AS month_num,
+         YEAR(o.created_at)  AS year_num,
+         SUM(oi.quantity * pv.price) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status = 'completed'
+    AND o.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
   GROUP BY year_num, month_num, month_label
   ORDER BY year_num ASC, month_num ASC
 ");
@@ -105,9 +116,12 @@ while ($row = $monthlySalesTrend->fetch_assoc()) {
 // ── ORDER STATUS BREAKDOWN ──────────────────
 $salesStatusBreakdown = [];
 $statusRes = $conn->query("
-  SELECT status, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM v_orders_full
-  GROUP BY status
+  SELECT o.status, COUNT(DISTINCT o.order_id) AS cnt,
+         COALESCE(SUM(oi.quantity * pv.price),0) AS revenue
+  FROM orders o
+  LEFT JOIN order_items oi ON oi.order_id = o.order_id
+  LEFT JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  GROUP BY o.status
 ");
 while ($row = $statusRes->fetch_assoc()) {
   $salesStatusBreakdown[$row['status']] = $row;
@@ -115,12 +129,24 @@ while ($row = $statusRes->fetch_assoc()) {
 
 // ── TOTAL REVENUE (completed only) ─────────
 $totalRevenue = $conn->query("
-  SELECT COALESCE(SUM(total_amount),0) AS total FROM v_orders_full WHERE status='completed'
+  SELECT COALESCE(SUM(oi.quantity * pv.price),0) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status='completed'
 ")->fetch_assoc()['total'];
 
 // ── AVERAGE ORDER VALUE ─────────────────────
 $avgOrderVal = $conn->query("
-  SELECT COALESCE(AVG(total_amount),0) AS avg FROM v_orders_full WHERE status='completed'
+  SELECT COALESCE(AVG(order_total),0) AS avg
+  FROM (
+    SELECT o.order_id, SUM(oi.quantity * pv.price) AS order_total
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.order_id
+    JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+    WHERE o.status='completed'
+    GROUP BY o.order_id
+  ) AS order_totals
 ")->fetch_assoc()['avg'];
 
 // ── TOTAL ITEMS SOLD ────────────────────────
@@ -134,10 +160,13 @@ $totalItemsSold = $conn->query("
 // ── PAYMENT METHOD BREAKDOWN ────────────────
 $paymentBreakdown = [];
 $payRes = $conn->query("
-  SELECT payment_method, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM v_orders_full
-  WHERE status='completed'
-  GROUP BY payment_method
+  SELECT o.payment_method, COUNT(DISTINCT o.order_id) AS cnt,
+         COALESCE(SUM(oi.quantity * pv.price),0) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status='completed'
+  GROUP BY o.payment_method
 ");
 while ($row = $payRes->fetch_assoc()) {
   $paymentBreakdown[] = $row;
@@ -146,10 +175,13 @@ while ($row = $payRes->fetch_assoc()) {
 // ── ORDER TYPE BREAKDOWN (delivery vs pickup) ──
 $orderTypeBreakdown = [];
 $typeRes = $conn->query("
-  SELECT order_type, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM v_orders_full
-  WHERE status='completed'
-  GROUP BY order_type
+  SELECT o.order_type, COUNT(DISTINCT o.order_id) AS cnt,
+         COALESCE(SUM(oi.quantity * pv.price),0) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status='completed'
+  GROUP BY o.order_type
 ");
 while ($row = $typeRes->fetch_assoc()) {
   $orderTypeBreakdown[] = $row;
@@ -157,21 +189,31 @@ while ($row = $typeRes->fetch_assoc()) {
 
 // ── BEST SELLING ITEMS (by revenue) ────────
 $topByRevenue = $conn->query("
-  SELECT oi.pizza_name, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM v_order_items_full oi
+  SELECT p.pizza_name, SUM(oi.quantity) AS units,
+         SUM(oi.quantity * pv.price) AS revenue
+  FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  JOIN pizzas p ON pv.pizza_id = p.pizza_id
   WHERE o.status='completed'
-  GROUP BY oi.pizza_name
+  GROUP BY p.pizza_id, p.pizza_name
   ORDER BY revenue DESC
   LIMIT 10
 ");
 
 // ── RECENT ORDERS LIST ──────────────────────
 $recentOrders = $conn->query("
-  SELECT o.order_id, o.customer_name, o.total_amount, o.status,
-         o.order_type, o.payment_method, o.created_at,
-         (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.order_id) AS item_count
-  FROM v_orders_full o
+  SELECT o.order_id,
+         COALESCE(u.username, oc.customer_name) AS customer_name,
+         SUM(oi.quantity * pv.price) AS total_amount,
+         o.status, o.order_type, o.payment_method, o.created_at,
+         COUNT(oi.item_id) AS item_count
+  FROM orders o
+  LEFT JOIN users u ON o.user_id = u.user_id
+  LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  GROUP BY o.order_id, customer_name, o.status, o.order_type, o.payment_method, o.created_at
   ORDER BY o.created_at DESC
   LIMIT 15
 ");
@@ -179,11 +221,13 @@ $recentOrders = $conn->query("
 // ── SALES BY SIZE ────────────────────────────
 $sizeBreakdown = [];
 $sizeRes = $conn->query("
-  SELECT oi.size, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM v_order_items_full oi
+  SELECT pv.size, SUM(oi.quantity) AS units,
+         SUM(oi.quantity * pv.price) AS revenue
+  FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
   WHERE o.status='completed'
-  GROUP BY oi.size
+  GROUP BY pv.size
   ORDER BY revenue DESC
 ");
 while ($row = $sizeRes->fetch_assoc()) {
@@ -193,11 +237,13 @@ while ($row = $sizeRes->fetch_assoc()) {
 // ── SALES BY CHEESE ──────────────────────────
 $cheeseBreakdown = [];
 $cheeseRes = $conn->query("
-  SELECT oi.cheese, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM v_order_items_full oi
+  SELECT pv.cheese, SUM(oi.quantity) AS units,
+         SUM(oi.quantity * pv.price) AS revenue
+  FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
   WHERE o.status='completed'
-  GROUP BY oi.cheese
+  GROUP BY pv.cheese
   ORDER BY revenue DESC
 ");
 while ($row = $cheeseRes->fetch_assoc()) {
@@ -206,12 +252,14 @@ while ($row = $cheeseRes->fetch_assoc()) {
 
 // ── WEEKLY SALES (last 7 days) ───────────────
 $weeklySalesRes = $conn->query("
-  SELECT DATE(created_at) AS sale_date,
-         COUNT(*) AS order_count,
-         COALESCE(SUM(total_amount),0) AS revenue
-  FROM v_orders_full
-  WHERE status='completed'
-    AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+  SELECT DATE(o.created_at) AS sale_date,
+         COUNT(DISTINCT o.order_id) AS order_count,
+         COALESCE(SUM(oi.quantity * pv.price),0) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  WHERE o.status='completed'
+    AND o.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
   GROUP BY sale_date
   ORDER BY sale_date ASC
 ");
@@ -231,11 +279,14 @@ while ($row = $topByRevenue->fetch_assoc()) {
 }
 // re-run for the table below
 $topByRevenueTable = $conn->query("
-  SELECT oi.pizza_name, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM v_order_items_full oi
+  SELECT p.pizza_name, SUM(oi.quantity) AS units,
+         SUM(oi.quantity * pv.price) AS revenue
+  FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
+  JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+  JOIN pizzas p ON pv.pizza_id = p.pizza_id
   WHERE o.status='completed'
-  GROUP BY oi.pizza_name
+  GROUP BY p.pizza_id, p.pizza_name
   ORDER BY revenue DESC
   LIMIT 10
 ");
@@ -856,8 +907,14 @@ if (isset($_SESSION['user_id'])) {
       <tbody>
         <?php
         $result = $conn->query("
-            SELECT pizza_id, pizza_name, category, ingredients, stock, image_path
-            FROM v_pizzas_full
+            SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
+                   (SELECT GROUP_CONCAT(i.ingredient_name ORDER BY i.ingredient_name SEPARATOR ', ')
+                    FROM pizza_ingredients pi2
+                    JOIN ingredients i ON pi2.ingredient_id = i.ingredient_id
+                    WHERE pi2.pizza_id = p.pizza_id) AS ingredients,
+                   p.stock, p.image_path
+            FROM pizzas p
+            JOIN categories c ON p.category_id = c.category_id
         ");
         while ($row = $result->fetch_assoc()):
           $stock = (int)$row['stock'];

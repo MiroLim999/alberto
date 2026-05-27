@@ -4,9 +4,21 @@ include "db_connect.php";
 
 // Fetch pending orders
 $ordersQuery = "
-  SELECT * FROM v_orders_full
-  WHERE status = 'pending'
-  ORDER BY created_at DESC
+    SELECT
+        o.order_id, o.branch_id, o.address, o.order_type,
+        o.payment_method, o.status, o.created_at,
+        COALESCE(u.username,      oc.customer_name) AS customer_name,
+        COALESCE(u.mobile_number, oc.mobile_number) AS mobile_number,
+        COALESCE(u.email,         oc.email)         AS email,
+        (SELECT SUM(oi.quantity * pv.price)
+         FROM order_items oi
+         JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+         WHERE oi.order_id = o.order_id)            AS total_amount
+    FROM orders o
+    LEFT JOIN users          u  ON o.user_id  = u.user_id
+    LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+    WHERE o.status = 'pending'
+    ORDER BY o.created_at DESC
 ";
 $ordersResult = $conn->query($ordersQuery);
 
@@ -26,9 +38,16 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $menuQuery = "
-  SELECT pizza_id, pizza_name, category, ingredients, image_path
-  FROM v_pizzas_full
-  ORDER BY category, pizza_name
+    SELECT
+        p.pizza_id, p.pizza_name, c.category_name AS category,
+        p.image_path,
+        (SELECT GROUP_CONCAT(i.ingredient_name ORDER BY i.ingredient_name SEPARATOR ', ')
+         FROM pizza_ingredients pi
+         JOIN ingredients i ON pi.ingredient_id = i.ingredient_id
+         WHERE pi.pizza_id = p.pizza_id) AS ingredients
+    FROM pizzas p
+    JOIN categories c ON p.category_id = c.category_id
+    ORDER BY c.category_name, p.pizza_name
 ";
 $menuResult = $conn->query($menuQuery);
 ?>

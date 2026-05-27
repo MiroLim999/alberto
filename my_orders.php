@@ -10,13 +10,16 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int)$_SESSION['user_id'];
 
-// Fetch this customer's orders with computed total from view
+// Fetch this customer's orders with computed total (no view)
 $ordersResult = $conn->query("
     SELECT o.order_id, o.branch_id, o.address, o.order_type,
            o.payment_method, o.status, o.created_at,
-           o.total_amount,
+           (SELECT COALESCE(SUM(oi.quantity * pv.price),0)
+            FROM order_items oi
+            JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+            WHERE oi.order_id = o.order_id) AS total_amount,
            b.branch_name, b.location AS branch_location
-    FROM v_orders_full o
+    FROM orders o
     LEFT JOIN branches b ON o.branch_id = b.branch_id
     WHERE o.user_id = $user_id
     ORDER BY o.created_at DESC
@@ -315,9 +318,12 @@ $ordersResult = $conn->query("
 
       // Fetch items for this order
       $itemsResult = $conn->query("
-          SELECT pizza_name, size, cheese, price, quantity, total
-          FROM v_order_items_full
-          WHERE order_id = {$order['order_id']}
+          SELECT p.pizza_name, pv.size, pv.cheese, pv.price,
+                 oi.quantity, (oi.quantity * pv.price) AS total
+          FROM order_items oi
+          JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+          JOIN pizzas         p  ON pv.pizza_id   = p.pizza_id
+          WHERE oi.order_id = {$order['order_id']}
       ");
 
       $branchDisplay = $order['branch_name']

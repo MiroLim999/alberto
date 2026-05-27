@@ -1,15 +1,25 @@
-<?php
+﻿<?php
 session_start();
 include "db_connect.php";
 
 // ── FETCH: Orders ready for delivery (completed by cashier, not yet accepted) ──
 $availableQuery = "
-  SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM v_orders_full o
-  LEFT JOIN branches b ON o.branch_id = b.branch_id
-  WHERE o.order_type = 'DELIVERY'
-    AND o.status = 'completed'
-  ORDER BY o.created_at ASC
+    SELECT o.order_id, o.branch_id, o.address, o.order_type,
+           o.payment_method, o.status, o.created_at, o.driver_id,
+           COALESCE(u.username,      oc.customer_name) AS customer_name,
+           COALESCE(u.mobile_number, oc.mobile_number) AS mobile_number,
+           COALESCE(u.email,         oc.email)         AS email,
+           (SELECT SUM(oi.quantity * pv.price)
+            FROM order_items oi
+            JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+            WHERE oi.order_id = o.order_id)            AS total_amount,
+           b.branch_name, b.location AS branch_location
+    FROM orders o
+    LEFT JOIN users          u  ON o.user_id  = u.user_id
+    LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+    LEFT JOIN branches       b  ON o.branch_id = b.branch_id
+    WHERE o.order_type = 'DELIVERY' AND o.status = 'completed'
+    ORDER BY o.created_at ASC
 ";
 $availableResult = $conn->query($availableQuery);
 
@@ -17,26 +27,43 @@ $availableResult = $conn->query($availableQuery);
 $driver_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 0;
 
 $activeQuery = "
-  SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM v_orders_full o
-  LEFT JOIN branches b ON o.branch_id = b.branch_id
-  WHERE o.order_type = 'DELIVERY'
-    AND o.status = 'out_for_delivery'
-    AND o.driver_id = '$driver_id'
-  ORDER BY o.created_at ASC
+    SELECT o.order_id, o.branch_id, o.address, o.order_type,
+           o.payment_method, o.status, o.created_at, o.driver_id,
+           COALESCE(u.username,      oc.customer_name) AS customer_name,
+           COALESCE(u.mobile_number, oc.mobile_number) AS mobile_number,
+           COALESCE(u.email,         oc.email)         AS email,
+           (SELECT SUM(oi.quantity * pv.price)
+            FROM order_items oi
+            JOIN pizza_variants pv ON oi.variant_id = pv.variant_id
+            WHERE oi.order_id = o.order_id)            AS total_amount,
+           b.branch_name, b.location AS branch_location
+    FROM orders o
+    LEFT JOIN users          u  ON o.user_id  = u.user_id
+    LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+    LEFT JOIN branches       b  ON o.branch_id = b.branch_id
+    WHERE o.order_type = 'DELIVERY'
+      AND o.status = 'out_for_delivery'
+      AND o.driver_id = '$driver_id'
+    ORDER BY o.created_at ASC
 ";
 $activeResult = $conn->query($activeQuery);
 
 // ── FETCH: Recently delivered by this driver (last 20) ──
 $doneQuery = "
-  SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM v_orders_full o
-  LEFT JOIN branches b ON o.branch_id = b.branch_id
-  WHERE o.order_type = 'DELIVERY'
-    AND o.status = 'delivered'
-    AND o.driver_id = '$driver_id'
-  ORDER BY o.updated_at DESC
-  LIMIT 20
+    SELECT o.order_id, o.branch_id, o.address, o.order_type,
+           o.payment_method, o.status, o.created_at, o.updated_at, o.driver_id,
+           COALESCE(u.username,      oc.customer_name) AS customer_name,
+           COALESCE(u.mobile_number, oc.mobile_number) AS mobile_number,
+           b.branch_name, b.location AS branch_location
+    FROM orders o
+    LEFT JOIN users          u  ON o.user_id  = u.user_id
+    LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
+    LEFT JOIN branches       b  ON o.branch_id = b.branch_id
+    WHERE o.order_type = 'DELIVERY'
+      AND o.status = 'delivered'
+      AND o.driver_id = '$driver_id'
+    ORDER BY o.updated_at DESC
+    LIMIT 20
 ";
 $doneResult = $conn->query($doneQuery);
 ?>
@@ -443,7 +470,7 @@ $doneResult = $conn->query($doneQuery);
 
       // Fetch items for this order
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
+      $items = $conn->query("SELECT oi.item_id, oi.quantity, p.pizza_name, pv.size, pv.cheese, pv.price, (oi.quantity * pv.price) AS total FROM order_items oi JOIN pizza_variants pv ON oi.variant_id = pv.variant_id JOIN pizzas p ON pv.pizza_id = p.pizza_id WHERE oi.order_id = $oid");
     ?>
 
     <div class="delivery-card card-available">
@@ -511,7 +538,7 @@ $doneResult = $conn->query($doneQuery);
       $hasActive = true;
 
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
+      $items = $conn->query("SELECT oi.item_id, oi.quantity, p.pizza_name, pv.size, pv.cheese, pv.price, (oi.quantity * pv.price) AS total FROM order_items oi JOIN pizza_variants pv ON oi.variant_id = pv.variant_id JOIN pizzas p ON pv.pizza_id = p.pizza_id WHERE oi.order_id = $oid");
     ?>
 
     <div class="delivery-card card-active">
@@ -578,7 +605,7 @@ $doneResult = $conn->query($doneQuery);
       $hasDone = true;
 
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
+      $items = $conn->query("SELECT oi.item_id, oi.quantity, p.pizza_name, pv.size, pv.cheese, pv.price, (oi.quantity * pv.price) AS total FROM order_items oi JOIN pizza_variants pv ON oi.variant_id = pv.variant_id JOIN pizzas p ON pv.pizza_id = p.pizza_id WHERE oi.order_id = $oid");
     ?>
 
     <div class="delivery-card card-done">

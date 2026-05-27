@@ -1,37 +1,106 @@
 <?php
 include "db_connect.php";
 
+$signupErrors  = [];   // field-level errors
+$signupSuccess = false;
+$old           = [];   // repopulate form on error
+
 if (isset($_POST['signup'])) {
 
-  $username = $_POST['username'];
-  $password = $_POST['password'];
-  $birth_date = $_POST['dobYear'] . "-" . $_POST['dobMonth'] . "-" . $_POST['dobDay'];
-  $gender = $_POST['gender'];
-  $mobile = $_POST['mobile'];
-  $email = $_POST['email'];
+    $username   = trim($_POST['username']   ?? '');
+    $password   = trim($_POST['password']   ?? '');
+    $dobMonth   = $_POST['dobMonth'] ?? '';
+    $dobDay     = $_POST['dobDay']   ?? '';
+    $dobYear    = $_POST['dobYear']  ?? '';
+    $birth_date = $dobYear . "-"
+                . str_pad($dobMonth, 2, '0', STR_PAD_LEFT) . "-"
+                . str_pad($dobDay,   2, '0', STR_PAD_LEFT);
+    $gender     = $_POST['gender']  ?? '';
+    $mobile     = trim($_POST['mobile'] ?? '');
+    $email      = trim($_POST['email']  ?? '');
+    $role       = "customer";
 
-  $role = "customer";
+    // Keep old values so the form repopulates on error
+    $old = compact('username','dobMonth','dobDay','dobYear','gender','mobile','email');
 
-  $check = "SELECT * FROM users WHERE username='$username'";
-  $result = $conn->query($check);
-
-  if ($result->num_rows > 0) {
-    echo "<script>alert('Username already exists');</script>";
-  } else {
-    $sql = "INSERT INTO users
-      (username, password, role, birth_date, gender, mobile_number, email)
-      VALUES
-      ('$username', '$password', '$role', '$birth_date', '$gender', '$mobile', '$email')";
-
-    if ($conn->query($sql)) {
-      echo "<script>
-        alert('Account created successfully!');
-        window.location.href='index.php';
-      </script>";
-    } else {
-      echo "<script>alert('Error creating account');</script>";
+    // ── Validation ────────────────────────────────────────────
+    if ($username === '') {
+        $signupErrors['username'] = 'Username is required.';
+    } elseif (strlen($username) < 3) {
+        $signupErrors['username'] = 'Username must be at least 3 characters.';
     }
-  }
+
+    if ($password === '') {
+        $signupErrors['password'] = 'Password is required.';
+    } elseif (strlen($password) < 6) {
+        $signupErrors['password'] = 'Password must be at least 6 characters.';
+    }
+
+    if ($mobile === '') {
+        $signupErrors['mobile'] = 'Mobile number is required.';
+    } elseif (!preg_match('/^09\d{9}$/', $mobile)) {
+        $signupErrors['mobile'] = 'Must be 11 digits starting with 09.';
+    }
+
+    if ($email === '') {
+        $signupErrors['email'] = 'Email is required.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $signupErrors['email'] = 'Please enter a valid email address.';
+    }
+
+    if ($gender === '') {
+        $signupErrors['gender'] = 'Please select a gender.';
+    }
+
+    if (!$dobYear || !$dobMonth || !$dobDay) {
+        $signupErrors['dob'] = 'Please select your complete date of birth.';
+    }
+
+    // ── Duplicate checks (only if basic validation passed) ────
+    if (empty($signupErrors['username'])) {
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE username = ? LIMIT 1");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $signupErrors['username'] = 'This username is already taken. Please choose another.';
+        }
+        $stmt->close();
+    }
+
+    if (empty($signupErrors['email'])) {
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $signupErrors['email'] = 'An account with this email already exists.';
+        }
+        $stmt->close();
+    }
+
+    // ── Insert if no errors ───────────────────────────────────
+    if (empty($signupErrors)) {
+        $stmt = $conn->prepare("
+            INSERT INTO users (username, password, role, birth_date, gender, mobile_number, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->bind_param("sssssss", $username, $password, $role, $birth_date, $gender, $mobile, $email);
+
+        if ($stmt->execute()) {
+            $new_user_id = $conn->insert_id;
+            $stmt->close();
+
+            session_start();
+            $_SESSION['user_id']  = $new_user_id;
+            $_SESSION['username'] = $username;
+            $_SESSION['role']     = $role;
+
+            header("Location: index.php");
+            exit;
+        } else {
+            $signupErrors['general'] = 'Error creating account. Please try again.';
+            $stmt->close();
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -309,6 +378,23 @@ if (isset($_POST['signup'])) {
       box-shadow: 0 6px 20px rgba(255,107,0,0.40);
     }
 
+    /* ── Inline field errors ── */
+    .input-error {
+      border-color: var(--red) !important;
+      box-shadow: 0 0 0 3px rgba(198,40,40,0.12) !important;
+      background: #fff8f8 !important;
+    }
+    .field-error-msg {
+      color: #c62828;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .field-error-msg i { font-size: 11px; }
+
     /* Modal styling */
     .modal {
       display: none;
@@ -423,36 +509,92 @@ if (isset($_POST['signup'])) {
     <div class="signup-form">
       <div class="form-title">Registration Details</div>
 
+      <?php if (!empty($signupErrors['general'])): ?>
+        <div style="background:#fff5f5;border:1.5px solid #FFCDD2;border-radius:8px;padding:10px 14px;color:#c62828;font-size:13px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <?= htmlspecialchars($signupErrors['general']) ?>
+        </div>
+      <?php endif; ?>
+
       <form method="POST">
 
+        <!-- USERNAME -->
         <label>Username *</label>
-        <input type="text" name="username" placeholder="Choose a username" required>
+        <input type="text" name="username"
+               placeholder="Choose a username"
+               value="<?= htmlspecialchars($old['username'] ?? '') ?>"
+               class="<?= isset($signupErrors['username']) ? 'input-error' : '' ?>"
+               required>
+        <?php if (isset($signupErrors['username'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['username']) ?></div>
+        <?php endif; ?>
 
+        <!-- PASSWORD -->
         <label>Password *</label>
         <div class="pw-wrap">
-          <input type="password" name="password" id="signupPassword" placeholder="Create a password" required>
+          <input type="password" name="password" id="signupPassword"
+                 placeholder="Create a password (min. 6 characters)"
+                 class="<?= isset($signupErrors['password']) ? 'input-error' : '' ?>"
+                 required>
           <i class="fa-solid fa-eye eye-icon" onclick="toggleSignupPassword()"></i>
         </div>
+        <?php if (isset($signupErrors['password'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['password']) ?></div>
+        <?php endif; ?>
 
-        <label>Date of Birth</label>
+        <!-- DATE OF BIRTH -->
+        <label>Date of Birth *</label>
         <div class="dob">
-          <select name="dobMonth" id="dobMonth" required></select>
-          <select name="dobDay" id="dobDay" required></select>
-          <select name="dobYear" id="dobYear" required></select>
+          <select name="dobMonth" id="dobMonth"
+                  class="<?= isset($signupErrors['dob']) ? 'input-error' : '' ?>"
+                  required></select>
+          <select name="dobDay" id="dobDay"
+                  class="<?= isset($signupErrors['dob']) ? 'input-error' : '' ?>"
+                  required></select>
+          <select name="dobYear" id="dobYear"
+                  class="<?= isset($signupErrors['dob']) ? 'input-error' : '' ?>"
+                  required></select>
         </div>
+        <?php if (isset($signupErrors['dob'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['dob']) ?></div>
+        <?php endif; ?>
 
+        <!-- GENDER -->
         <label class="gender-label">Gender *</label>
         <div class="gender-inline">
-          <label><input type="radio" name="gender" value="Male" required> Male</label>
-          <label><input type="radio" name="gender" value="Female"> Female</label>
-          <label><input type="radio" name="gender" value="Other"> Other</label>
+          <?php foreach (['Male','Female','Other'] as $g): ?>
+            <label>
+              <input type="radio" name="gender" value="<?= $g ?>"
+                     <?= (($old['gender'] ?? '') === $g) ? 'checked' : '' ?>
+                     required> <?= $g ?>
+            </label>
+          <?php endforeach; ?>
         </div>
+        <?php if (isset($signupErrors['gender'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['gender']) ?></div>
+        <?php endif; ?>
 
+        <!-- MOBILE -->
         <label>Mobile Number *</label>
-        <input type="text" name="mobile" placeholder="09XXXXXXXXX" required maxlength="11">
+        <input type="text" name="mobile"
+               placeholder="09XXXXXXXXX"
+               value="<?= htmlspecialchars($old['mobile'] ?? '') ?>"
+               class="<?= isset($signupErrors['mobile']) ? 'input-error' : '' ?>"
+               maxlength="11" required>
+        <?php if (isset($signupErrors['mobile'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['mobile']) ?></div>
+        <?php endif; ?>
 
+        <!-- EMAIL -->
         <label>Email *</label>
-        <input type="email" name="email" placeholder="Enter your email" required>
+        <input type="email" name="email"
+               placeholder="Enter your email"
+               value="<?= htmlspecialchars($old['email'] ?? '') ?>"
+               class="<?= isset($signupErrors['email']) ? 'input-error' : '' ?>"
+               required>
+        <?php if (isset($signupErrors['email'])): ?>
+          <div class="field-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars($signupErrors['email']) ?></div>
+        <?php endif; ?>
 
         <button class="create-account-btn" type="submit" name="signup">
           Create Account
@@ -504,18 +646,34 @@ function toggleSignupPassword() {
   }
 }
 
-function termsAlert() {
-  document.getElementById("termsModal").style.display = "block";
-}
-function privacyAlert() {
-  document.getElementById("privacyModal").style.display = "block";
-}
-function closeTerms() {
-  document.getElementById("termsModal").style.display = "none";
-}
-function closePrivacy() {
-  document.getElementById("privacyModal").style.display = "none";
-}
+function termsAlert()  { document.getElementById("termsModal").style.display   = "block"; }
+function privacyAlert(){ document.getElementById("privacyModal").style.display = "block"; }
+function closeTerms()  { document.getElementById("termsModal").style.display   = "none";  }
+function closePrivacy(){ document.getElementById("privacyModal").style.display = "none";  }
+
+// ── Restore DOB dropdowns after server-side validation error ──
+document.addEventListener("DOMContentLoaded", function () {
+  // home.js populateDOB() fills the dropdowns — then we set the saved values
+  const savedMonth = <?= json_encode($old['dobMonth'] ?? '') ?>;
+  const savedDay   = <?= json_encode($old['dobDay']   ?? '') ?>;
+  const savedYear  = <?= json_encode($old['dobYear']  ?? '') ?>;
+
+  if (!savedMonth && !savedDay && !savedYear) return;
+
+  // Wait for populateDOB to finish (it runs synchronously in DOMContentLoaded too)
+  setTimeout(() => {
+    const m = document.getElementById("dobMonth");
+    const d = document.getElementById("dobDay");
+    const y = document.getElementById("dobYear");
+    if (m && savedMonth) m.value = savedMonth;
+    if (y && savedYear)  y.value = savedYear;
+    // Trigger change so days populate, then set day
+    if (m) m.dispatchEvent(new Event("change"));
+    if (y) y.dispatchEvent(new Event("change"));
+    setTimeout(() => { if (d && savedDay) d.value = savedDay; }, 50);
+  }, 10);
+});
+</script>
 </script>
 
 </body>

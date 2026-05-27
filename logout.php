@@ -1,7 +1,7 @@
 <?php
 session_start();
 session_destroy();
-
-header("Location: index.php");
+// All roles land on login page after logout
+header("Location: login.php");
 exit;
 ?>

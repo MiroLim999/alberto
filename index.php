@@ -13,9 +13,16 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $menuQuery = "
-  SELECT pizza_id, pizza_name, category, ingredients, image_path
-  FROM v_pizzas_full
-  ORDER BY category, pizza_name
+    SELECT
+        p.pizza_id, p.pizza_name, c.category_name AS category,
+        p.image_path,
+        (SELECT GROUP_CONCAT(i.ingredient_name ORDER BY i.ingredient_name SEPARATOR ', ')
+         FROM pizza_ingredients pi
+         JOIN ingredients i ON pi.ingredient_id = i.ingredient_id
+         WHERE pi.pizza_id = p.pizza_id) AS ingredients
+    FROM pizzas p
+    JOIN categories c ON p.category_id = c.category_id
+    ORDER BY c.category_name, p.pizza_name
 ";
 $menuResult = $conn->query($menuQuery);
 ?>
