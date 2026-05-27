@@ -33,7 +33,13 @@ if ($customer_name === '' || $mobile === '' || $branch_id === 0 || empty($items)
 }
 
 session_start();
-$user_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
+// Only attribute the order to the session user if they're a customer.
+// Cashier/admin/driver sessions = walk-in order → user_id stays NULL
+// and the form-supplied contact info goes into order_contacts.
+$session_role = strtolower($_SESSION['role'] ?? '');
+$user_id = ($session_role === 'customer' && isset($_SESSION['user_id']))
+    ? intval($_SESSION['user_id'])
+    : null;
 
 // ── INSERT INTO orders ───────────────────────
 $stmt = $conn->prepare("

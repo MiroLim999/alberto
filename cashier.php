@@ -372,6 +372,215 @@ $menuResult = $conn->query($menuQuery);
     /* ── Cashier-page menu-scroll height override ── */
     .cashier-page .menu-scroll { max-height: 1400px; }
 
+    /* ══════════════════════════════════════════════
+       TOAST NOTIFICATIONS
+    ══════════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      min-width: 300px;
+      max-width: 380px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+      pointer-events: all;
+      animation: toastIn 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    @keyframes toastIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    @keyframes toastOut {
+      from { transform: translateX(0);    opacity: 1; }
+      to   { transform: translateX(120%); opacity: 0; }
+    }
+
+    .toast.removing { animation: toastOut 0.3s ease forwards; }
+
+    .toast-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .toast-body { flex: 1; }
+    .toast-title {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .toast-msg { color: inherit; opacity: 0.85; font-size: 12px; }
+
+    .toast-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      opacity: 0.5;
+      padding: 0;
+      margin-top: 0;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    .toast-close:hover { opacity: 1; }
+
+    /* Progress bar */
+    .toast-progress {
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 3px;
+      border-radius: 0 0 10px 10px;
+      animation: toastProgress linear forwards;
+    }
+    @keyframes toastProgress {
+      from { width: 100%; }
+      to   { width: 0%; }
+    }
+
+    /* Variants */
+    .toast-error {
+      background: #fff5f5;
+      border: 1.5px solid #FFCDD2;
+      color: #c62828;
+    }
+    .toast-error .toast-progress { background: #c62828; }
+
+    .toast-warning {
+      background: #fffbf0;
+      border: 1.5px solid #FFE082;
+      color: #c05000;
+    }
+    .toast-warning .toast-progress { background: #f4a700; }
+
+    .toast-success {
+      background: #f1f8e9;
+      border: 1.5px solid #AED581;
+      color: #2e7d32;
+    }
+    .toast-success .toast-progress { background: #2e7d32; }
+
+    .toast-info {
+      background: #e8f0ff;
+      border: 1.5px solid #90CAF9;
+      color: #1a56db;
+    }
+    .toast-info .toast-progress { background: #1a56db; }
+
+    /* ══════════════════════════════════════════════
+       VALIDATION MODAL (delivery address etc.)
+    ══════════════════════════════════════════════ */
+    #validationModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      background: rgba(0,0,0,0.45);
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+    #validationModal.open { display: flex; }
+
+    .vmodal-box {
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.18);
+      animation: popIn 0.25s ease;
+      text-align: center;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .vmodal-icon {
+      font-size: 44px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .vmodal-title {
+      font-family: var(--font-main);
+      font-size: 17px;
+      font-weight: 900;
+      color: var(--text-dark);
+      margin-bottom: 8px;
+    }
+
+    .vmodal-msg {
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.6;
+      margin-bottom: 22px;
+    }
+
+    .vmodal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .vmodal-btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font-main);
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .vmodal-btn:hover { transform: translateY(-1px); }
+
+    .vmodal-btn-primary {
+      background: var(--orange);
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(255,107,0,0.3);
+    }
+    .vmodal-btn-primary:hover { background: var(--orange-light); }
+
+    .vmodal-btn-ghost {
+      background: #f0f0f0;
+      color: #555;
+    }
+    .vmodal-btn-ghost:hover { background: #e4e4e4; }
+
+    /* Highlight a field with error */
+    .field-error {
+      border-color: var(--red) !important;
+      box-shadow: 0 0 0 3px rgba(198,40,40,0.15) !important;
+      animation: shake 0.35s ease;
+    }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%,60%  { transform: translateX(-5px); }
+      40%,80%  { transform: translateX(5px); }
+    }
+
   </style>
 </head>
 
@@ -693,6 +902,275 @@ $menuResult = $conn->query($menuQuery);
   </div>
 </div>
 
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<!-- VALIDATION MODAL -->
+<div id="validationModal">
+  <div class="vmodal-box">
+    <span class="vmodal-icon" id="vmodalIcon">⚠️</span>
+    <div class="vmodal-title" id="vmodalTitle">Missing Information</div>
+    <div class="vmodal-msg"   id="vmodalMsg">Please fill in all required fields.</div>
+    <div class="vmodal-actions" id="vmodalActions">
+      <button class="vmodal-btn vmodal-btn-ghost"   onclick="closeValidationModal()">Dismiss</button>
+      <button class="vmodal-btn vmodal-btn-primary" id="vmodalActionBtn" onclick="closeValidationModal()">OK</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/home.js"></script>
-</body>
-</html>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  TOAST SYSTEM
+// ══════════════════════════════════════════════════════════════
+function showToast(type, title, msg, duration = 4000) {
+  const icons = { error: '❌', warning: '⚠️', success: '✅', info: 'ℹ️' };
+  const container = document.getElementById('toast-container');
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || 'ℹ️'}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${msg ? `<div class="toast-msg">${msg}</div>` : ''}
+    </div>
+    <button class="toast-close" onclick="dismissToast(this.parentElement)">&times;</button>
+    <div class="toast-progress" style="animation-duration:${duration}ms"></div>
+  `;
+
+  container.appendChild(toast);
+
+  // Auto-remove
+  const timer = setTimeout(() => dismissToast(toast), duration);
+  toast._timer = timer;
+}
+
+function dismissToast(toast) {
+  if (!toast || toast._removing) return;
+  toast._removing = true;
+  clearTimeout(toast._timer);
+  toast.classList.add('removing');
+  toast.addEventListener('animationend', () => toast.remove(), { once: true });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VALIDATION MODAL
+// ══════════════════════════════════════════════════════════════
+let _vmodalCallback = null;
+
+function showValidationModal(icon, title, msg, actionLabel, actionCallback, showDismiss = true) {
+  document.getElementById('vmodalIcon').textContent  = icon;
+  document.getElementById('vmodalTitle').textContent = title;
+  document.getElementById('vmodalMsg').textContent   = msg;
+
+  const actionBtn  = document.getElementById('vmodalActionBtn');
+  const actionsDiv = document.getElementById('vmodalActions');
+
+  actionBtn.textContent = actionLabel;
+  _vmodalCallback = actionCallback;
+
+  // Show/hide dismiss button
+  const dismissBtn = actionsDiv.querySelector('.vmodal-btn-ghost');
+  dismissBtn.style.display = showDismiss ? '' : 'none';
+
+  document.getElementById('validationModal').classList.add('open');
+}
+
+function closeValidationModal() {
+  document.getElementById('validationModal').classList.remove('open');
+  if (typeof _vmodalCallback === 'function') {
+    _vmodalCallback();
+    _vmodalCallback = null;
+  }
+}
+
+// Close on backdrop click
+document.getElementById('validationModal').addEventListener('click', function(e) {
+  if (e.target === this) closeValidationModal();
+});
+
+// ══════════════════════════════════════════════════════════════
+//  FIELD HIGHLIGHT HELPER
+// ══════════════════════════════════════════════════════════════
+function highlightField(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('field-error');
+  el.addEventListener('input', () => el.classList.remove('field-error'), { once: true });
+  el.addEventListener('change', () => el.classList.remove('field-error'), { once: true });
+  // Scroll to field
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => el.focus(), 300);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CASHIER-SPECIFIC finalizeOrder OVERRIDE
+//  Replaces the generic home.js finalizeOrder with full
+//  validation + toast/modal error handling for cashier.php
+// ══════════════════════════════════════════════════════════════
+function finalizeOrder() {
+
+  const table        = document.getElementById('orderTable');
+  const customerName = document.getElementById('customerName').value.trim();
+  const mobile       = document.getElementById('contact').value.trim();
+  const branchSelect = document.getElementById('branch');
+  const branch       = branchSelect.value;
+  const branchText   = branchSelect.options[branchSelect.selectedIndex]?.text ?? '';
+  const address      = document.getElementById('address').value.trim();
+  const orderTypeEl  = document.querySelector('input[name="orderType"]:checked');
+  const paymentEl    = document.querySelector('input[name="payment"]:checked');
+  const totalStr     = document.getElementById('totalAmount').value;
+  const total        = parseFloat(totalStr) || 0;
+  const received     = parseFloat(document.getElementById('amountReceived').value) || 0;
+  const email        = document.getElementById('optionalEmail').value.trim();
+
+  // ── 1. Must have at least one item ──────────────────────────
+  if (table.rows.length <= 1) {
+    showToast('error', 'No Items', 'Add at least one pizza to the order before finalizing.');
+    return;
+  }
+
+  // ── 2. Customer name ────────────────────────────────────────
+  if (customerName === '') {
+    showToast('warning', 'Customer Name Required', 'Please enter the customer\'s name.');
+    highlightField('customerName');
+    return;
+  }
+
+  // ── 3. Mobile number ────────────────────────────────────────
+  if (mobile === '') {
+    showToast('warning', 'Mobile Number Required', 'Please enter the customer\'s mobile number.');
+    highlightField('contact');
+    return;
+  }
+  if (mobile.length !== 11 || !mobile.startsWith('09')) {
+    showToast('error', 'Invalid Mobile Number', 'Mobile number must be 11 digits and start with 09.');
+    highlightField('contact');
+    return;
+  }
+
+  // ── 4. Branch ────────────────────────────────────────────────
+  if (!branch || branch === '0') {
+    showToast('warning', 'Branch Required', 'Please select a branch for this order.');
+    highlightField('branch');
+    return;
+  }
+
+  // ── 5. Delivery address ──────────────────────────────────────
+  const orderType = orderTypeEl ? orderTypeEl.value : 'PICK-UP';
+  if (orderType === 'DELIVERY' && address === '') {
+    showValidationModal(
+      '🛵',
+      'Delivery Address Missing',
+      'This order is set to DELIVERY but no address was entered. Please fill in the delivery address before finalizing.',
+      'Fill Address',
+      () => highlightField('address'),
+      true
+    );
+    return;
+  }
+
+  // ── 6. Payment ───────────────────────────────────────────────
+  const payment = paymentEl ? paymentEl.value : 'CASH';
+  if (payment === 'CASH') {
+    if (received === 0) {
+      showToast('warning', 'Amount Not Entered', 'Please enter the amount received from the customer.');
+      highlightField('amountReceived');
+      return;
+    }
+    if (received < total) {
+      showValidationModal(
+        '💸',
+        'Insufficient Payment',
+        `Total is ₱${total.toFixed(2)} but only ₱${received.toFixed(2)} was received. Please collect the correct amount.`,
+        'OK',
+        null,
+        false
+      );
+      return;
+    }
+  }
+
+  // ── 7. Collect items ─────────────────────────────────────────
+  const items = [];
+  for (let i = 1; i < table.rows.length; i++) {
+    const row = table.rows[i];
+    items.push({
+      pizza:    row.cells[0].innerText,
+      size:     row.cells[1].innerText,
+      cheese:   row.cells[2].innerText,
+      price:    parseFloat(row.cells[3].innerText),
+      quantity: parseInt(row.cells[4].innerText),
+      total:    parseFloat(row.cells[5].innerText),
+    });
+  }
+
+  // ── 8. Disable button + send ─────────────────────────────────
+  const btn = document.getElementById('finalizeBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Processing...';
+
+  fetch('save_order.php', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      customer_name: customerName,
+      mobile,
+      email,
+      branch,
+      address,
+      order_type: orderType,
+      payment,
+      total,
+      items,
+      is_online: 0,   // cashier orders are always completed immediately
+    }),
+  })
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  })
+  .then(data => {
+    if (data.status !== 'success') {
+      showToast('error', 'Order Failed', data.message || 'An unknown error occurred. Please try again.');
+      btn.disabled    = false;
+      btn.textContent = 'FINALIZE';
+      return;
+    }
+
+    // ── Success ──────────────────────────────────────────────
+    showToast('success', 'Order Saved', `Order #${data.order_id} completed successfully.`, 5000);
+
+    showReceipt(
+      data.order_id, customerName, mobile, email,
+      branchText, address, orderType, payment, total, items,
+      false   // not online
+    );
+
+    // Mark pending online order as completed if we were processing one
+    if (window.currentProcessingOrderId) {
+      fetch('complete_order.php', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    `order_id=${window.currentProcessingOrderId}`,
+      });
+      window.currentProcessingOrderId = null;
+    }
+
+    setTimeout(() => cancelOrder(), 800);
+    setTimeout(() => {
+      document.getElementById('successMessage').style.display = 'none';
+    }, 4000);
+
+    btn.disabled    = false;
+    btn.textContent = 'FINALIZE';
+  })
+  .catch(err => {
+    showToast('error', 'Network Error', `Could not reach the server. Check your connection and try again. (${err.message})`);
+    btn.disabled    = false;
+    btn.textContent = 'FINALIZE';
+  });
+}
+</script>
