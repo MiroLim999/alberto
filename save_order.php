@@ -115,7 +115,7 @@ foreach ($items as $item) {
     }
 
     $stmtItem->bind_param(
-        "iiissssdid",
+        "iiisssdid",
         $order_id, $pizza_id, $variant_id,
         $pizza_name, $size_clean, $cheese, $price, $quantity, $item_total
     );

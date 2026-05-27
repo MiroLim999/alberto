@@ -511,7 +511,7 @@ VALUES
 (19,7,21,76,'Salad Pizza','11','Mozzarella',315.00,3,945.00),
 (20,8,27,95,'Aloha','9','Quickmelt',150.00,1,150.00),
 (21,8,3,9,'Cookies N Cheese','9','Quickmelt',110.00,1,110.00),
-(22,9,31,NULL,'Meaty Royale','9','Quickmelt',0.00,1,0.00),
+(22,9,31,NULL,'Meaty Royale','9','Quickmelt',0.00,1,0.00),  -- variant_id NULL: no 9" variant exists (bad original data)
 (23,9,27,95,'Aloha','9','Quickmelt',150.00,1,150.00),
 (24,9,9,37,'Ham And Egg','9','Quickmelt',180.00,1,180.00),
 (25,10,5,21,'Oreo Pina','9','Quickmelt',115.00,1,115.00),
@@ -531,7 +531,7 @@ VALUES
 (39,14,48,166,'Pizza Tropicana','11','Mozzarella',280.00,1,280.00),
 (40,15,21,75,'Salad Pizza','11','Quickmelt',295.00,1,295.00),
 (41,15,7,30,'Ham Delight','9','Mozzarella',160.00,1,160.00),
-(42,16,31,NULL,'Meaty Royale','9','Quickmelt',0.00,1,0.00),
+(42,16,31,NULL,'Meaty Royale','9','Quickmelt',0.00,1,0.00),  -- variant_id NULL: no 9" variant exists (bad original data)
 (43,16,27,95,'Aloha','9','Quickmelt',150.00,1,150.00),
 (44,16,9,37,'Ham And Egg','9','Quickmelt',180.00,1,180.00),
 (45,17,26,91,'Hawaiian','9','Quickmelt',145.00,1,145.00),
