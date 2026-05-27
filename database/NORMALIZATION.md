@@ -307,12 +307,14 @@ We extract each transitively dependent attribute into its own lookup table, repl
 
 #### Table: `pizzas`
 
-| pizza_id 🔑 | pizza_name | category_id 🔗 | image_path | stock |
-|---|---|---|---|---|
-| 1 | Pizza Supreme | 1 | menu/.../Pizza Supreme.png | 8 |
-| 3 | Cookies N Cheese | 2 | menu/.../Cookies N Cheese.png | 9 |
-| 26 | Hawaiian | 1 | menu/.../Hawaiian.png | 8 |
-| 27 | Aloha | 1 | menu/.../Aloha.png | 9 |
+| pizza_id 🔑 | pizza_name | category_id 🔗 | image_path | stock | deleted_at |
+|---|---|---|---|---|---|
+| 1 | Pizza Supreme | 1 | menu/.../Pizza Supreme.png | 8 | NULL |
+| 3 | Cookies N Cheese | 2 | menu/.../Cookies N Cheese.png | 9 | NULL |
+| 26 | Hawaiian | 1 | menu/.../Hawaiian.png | 8 | NULL |
+| 27 | Aloha | 1 | menu/.../Aloha.png | 9 | NULL |
+
+`deleted_at` is a soft-delete timestamp. When an admin archives a pizza, this column is set to `NOW()` instead of deleting the row. All menu and ordering queries filter `WHERE deleted_at IS NULL`. Setting it back to `NULL` restores the pizza. This preserves order history — `order_items` rows that reference archived pizza variants remain intact.
 
 #### Table: `pizza_variants`
 
@@ -383,6 +385,8 @@ Only `variant_id` and `quantity` — price is derived from `pizza_variants` at q
 | 5 | 3 | 108 | 2 |
 | 6 | 3 | 78 | 1 |
 
+`variant_id` has `ON DELETE RESTRICT` — a pizza variant cannot be hard-deleted while any order item references it. This is intentional: order history is protected. Pizzas are archived via `deleted_at` (soft delete) rather than hard-deleted, so this constraint is never triggered in normal operation. Permanent deletion from the archive is only allowed when no order items reference the pizza's variants.
+
 ### Did we satisfy 3NF?
 
 For each table, we check that every non-key attribute depends on the primary key and nothing else:
@@ -392,7 +396,7 @@ For each table, we check that every non-key attribute depends on the primary key
 | `branches` | `branch_id` directly | ✅ |
 | `categories` | `category_id` directly | ✅ |
 | `users` | `user_id` directly | ✅ |
-| `pizzas` | `pizza_id` directly (category accessed via FK) | ✅ |
+| `pizzas` | `pizza_id` directly (category via FK; `deleted_at` is a lifecycle flag, not a derived value) | ✅ |
 | `pizza_variants` | `variant_id` directly | ✅ |
 | `ingredients` | `ingredient_id` directly | ✅ |
 | `pizza_ingredients` | nothing — pure junction table | ✅ |
@@ -469,6 +473,8 @@ The same reasoning applies to `customer_name` on the `orders` table — we remov
 ```
 
 10 tables, each with a clear purpose, each satisfying 3NF, each connected through proper foreign keys.
+
+> **Note on `pizzas.deleted_at`:** This column was added after initial normalization to support soft delete (archive). It does not violate 3NF — it is a lifecycle attribute that depends directly on `pizza_id`. Archived pizzas are hidden from the menu (`WHERE deleted_at IS NULL`) but their data remains intact, preserving order history.
 
 ---
 
