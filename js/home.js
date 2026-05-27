@@ -376,10 +376,11 @@ function checkFinalizeBtn() {
   const hasBranch = branch !== "" && branch !== "0";
 
   // Condition 4: if Delivery is selected, address must be filled
-  const orderTypeEl = document.querySelector('input[name="orderType"]:checked');
-  const orderType   = orderTypeEl ? orderTypeEl.parentElement.textContent.trim() : "";
-  const needsAddress = orderType === "DELIVERY";
-  const hasAddress   = !needsAddress || address !== "";
+  // NOTE: address validation is intentionally NOT checked here —
+  // it's handled in finalizeOrder() with a proper modal popup.
+  // Disabling the button here would prevent the modal from showing.
+  const needsAddress = false; // always allow click; modal handles it
+  const hasAddress   = true;
 
   // Bonus: stock status must not be Out of Stock (only on index.php)
   const stockOk = !stockStatus || stockStatus.value !== "Out of Stock";
@@ -394,7 +395,6 @@ function checkFinalizeBtn() {
     if (!hasItems)    reasons.push("Add at least 1 pizza");
     if (!hasCustomer) reasons.push("Fill in Username and Mobile Number");
     if (!hasBranch)   reasons.push("Select a Branch");
-    if (!hasAddress)  reasons.push("Enter a Delivery Address");
     if (!stockOk)     reasons.push("Selected pizza is Out of Stock");
     btn.title = reasons.join(" • ");
   } else {
@@ -655,7 +655,23 @@ function finalizeOrder() {
     return;
   }
   if (order_type === "DELIVERY" && address === "") {
-    alert("Please enter your delivery address.");
+    // Use modal if available (index.php / cashier.php inject it),
+    // otherwise fall back to alert
+    if (typeof showValidationModal === 'function') {
+      showValidationModal(
+        '🛵',
+        'Delivery Address Required',
+        'You selected DELIVERY but haven\'t entered an address. Please fill in your delivery address to continue.',
+        'Fill Address',
+        () => {
+          const el = document.getElementById('address');
+          if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); setTimeout(() => el.focus(), 300); }
+        },
+        true
+      );
+    } else {
+      alert("Please enter your delivery address.");
+    }
     return;
   }
 

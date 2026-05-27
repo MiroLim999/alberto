@@ -816,8 +816,8 @@ $menuResult = $conn->query($menuQuery);
       <?php endwhile; ?>
     </select>
 
-    <label>Address</label>
-    <input type="text" id="address" placeholder="Enter exact address">
+    <label id="addressLabel">Address <span id="addressOptional" style="font-size:11px; font-weight:400; color:#aaa;">(optional for pick-up)</span><span class="req-star" style="color:var(--red); margin-left:2px; display:none;">*</span></label>
+    <input type="text" id="address" placeholder="Enter address (optional for pick-up)">
 
     <div class="inline-group">
       <label>Order:</label>
@@ -1004,6 +1004,32 @@ function highlightField(id) {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setTimeout(() => el.focus(), 300);
 }
+
+// ── Address label: update required/optional based on order type ──
+function updateAddressLabel() {
+  const orderTypeEl = document.querySelector('input[name="orderType"]:checked');
+  const isDelivery  = orderTypeEl && orderTypeEl.value === 'DELIVERY';
+  const label       = document.getElementById('addressLabel');
+  const addrInput   = document.getElementById('address');
+  const optSpan     = document.getElementById('addressOptional');
+  const reqStar     = label ? label.querySelector('.req-star') : null;
+  if (!label) return;
+  if (isDelivery) {
+    if (optSpan) optSpan.style.display = 'none';
+    if (reqStar) reqStar.style.display = 'inline';
+    addrInput.placeholder = 'Enter delivery address (required)';
+  } else {
+    if (optSpan) optSpan.style.display = '';
+    if (reqStar) reqStar.style.display = 'none';
+    addrInput.placeholder = 'Enter address (optional for pick-up)';
+  }
+}
+
+// Hook order type radios
+document.querySelectorAll('input[name="orderType"]').forEach(r => {
+  r.addEventListener('change', updateAddressLabel);
+});
+document.addEventListener('DOMContentLoaded', updateAddressLabel);
 
 // ══════════════════════════════════════════════════════════════
 //  CASHIER-SPECIFIC finalizeOrder OVERRIDE

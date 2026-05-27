@@ -206,6 +206,7 @@ if (isset($_SESSION['role'])) {
   <img src="logo/Alberto's Pizza.png" class="logo-img" alt="Alberto's Pizza Logo">
   <div class="nav-links">
     <a href="<?= $homeLink ?>">HOME</a>
+    <a href="my_orders.php"><i class="fa-solid fa-receipt" style="margin-right:4px;"></i>My Orders</a>
     <a href="profile_customer.php"><?= htmlspecialchars($_SESSION['username']); ?></a>
     <a href="logout.php"><i class="fa-solid fa-right-from-bracket"></i></a>
   </div>
