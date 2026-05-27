@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'dri
 $driver_id = intval($_SESSION['user_id']);
 $driver_name = htmlspecialchars($_SESSION['username'] ?? 'Driver');
 
-// ── FETCH: Orders ready for delivery ──
+// ── FETCH: Orders for delivery (pending = awaiting cashier; completed = ready) ──
 $availableQuery = "
     SELECT o.order_id, o.branch_id, o.address, o.order_type,
            o.payment_method, o.status, o.created_at, o.driver_id,
@@ -27,7 +27,9 @@ $availableQuery = "
     LEFT JOIN users          u  ON o.user_id  = u.user_id
     LEFT JOIN order_contacts oc ON o.order_id = oc.order_id
     LEFT JOIN branches       b  ON o.branch_id = b.branch_id
-    WHERE o.order_type = 'DELIVERY' AND o.status = 'completed' AND o.driver_id IS NULL
+    WHERE o.order_type = 'DELIVERY'
+      AND o.status IN ('pending', 'completed')
+      AND o.driver_id IS NULL
     ORDER BY o.created_at ASC
 ";
 $availableResult = $conn->query($availableQuery);
@@ -907,7 +909,11 @@ function getOrderItems($conn, $oid) {
               <div class="d-order-num">Order #<?= $order['order_id'] ?></div>
               <div class="d-time"><?= date('M d • g:i A', strtotime($order['created_at'])) ?></div>
             </div>
-            <span class="d-status blue">Ready</span>
+            <?php if ($order['status'] === 'pending'): ?>
+              <span class="d-status amber">Awaiting Cashier</span>
+            <?php else: ?>
+              <span class="d-status blue">Ready</span>
+            <?php endif; ?>
           </div>
 
           <div class="d-row">
