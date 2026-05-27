@@ -1,5 +1,12 @@
 <?php
 session_start();
+
+// ── Role guard: admin only ────────────────
+if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'admin') {
+    header("Location: login.php");
+    exit;
+}
+
 include "db_connect.php";
 
 $categories = $conn->query("SELECT category_name FROM categories ORDER BY category_name ASC");
@@ -55,7 +62,7 @@ $lowStockPizzas = $conn->query("
 ");
 
 // ── TOP SELLING PIZZAS (for bar chart) ──
-/*$topPizzas = $conn->query("
+$topPizzas = $conn->query("
   SELECT oi.pizza_name, SUM(oi.quantity) AS total_sold
   FROM order_items oi
   JOIN orders o ON oi.order_id = o.order_id
@@ -70,10 +77,10 @@ $chartData   = [];
 while ($row = $topPizzas->fetch_assoc()) {
   $chartLabels[] = $row['pizza_name'];
   $chartData[]   = (int)$row['total_sold'];
-}*/
+}
 
 // ── MONTHLY SALES TREND (last 6 months) ──
-/*$monthlySalesTrend = $conn->query("
+$monthlySalesTrend = $conn->query("
   SELECT DATE_FORMAT(created_at, '%b %Y') AS month_label,
          MONTH(created_at) AS month_num,
          YEAR(created_at)  AS year_num,
@@ -90,7 +97,7 @@ $trendData   = [];
 while ($row = $monthlySalesTrend->fetch_assoc()) {
   $trendLabels[] = $row['month_label'];
   $trendData[]   = (float)$row['total'];
-}*/
+}
 
 // ═══════════════════════════════════════════
 // SALES SECTION QUERIES
@@ -577,21 +584,21 @@ if (isset($_SESSION['user_id'])) {
       <!-- ── ROW 3: CHARTS SIDE BY SIDE ───────────────── -->
       <div style="display:flex; gap:18px; margin-bottom:18px;">
 
-        <!-- Top Selling Pizzas Bar Chart
+        <!-- Top Selling Pizzas Bar Chart -->
         <div class="card" style="flex:1.4; min-width:0;">
           <div style="font-size:13px; font-weight:700; margin-bottom:12px; color:#555;">
             🍕 Top Selling Pizzas
           </div>
           <canvas id="topPizzasChart" height="220"></canvas>
-        </div> -->
+        </div>
 
-        <!-- Monthly Sales Trend Line Chart
+        <!-- Monthly Sales Trend Line Chart -->
         <div class="card" style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:700; margin-bottom:12px; color:#555;">
             📈 Monthly Sales Trend (Last 6 Months)
           </div>
           <canvas id="salesTrendChart" height="220"></canvas>
-        </div> -->
+        </div>
 
       </div>
 
@@ -2072,7 +2079,7 @@ if (isset($_SESSION['user_id'])) {
 
       </div>
 
-      <!-- ── ROW 3: WEEKLY TREND + TOP BY REVENUE ──────── 
+      <!-- ── ROW 3: WEEKLY TREND + TOP BY REVENUE ──────── -->
       <div class="sales-row">
 
         <div class="sales-card" style="flex:1.3; min-width:0;">
@@ -2091,7 +2098,7 @@ if (isset($_SESSION['user_id'])) {
           <?php endif; ?>
         </div>
 
-      </div>-->
+      </div>
 
       <!-- ── ROW 4: TOP PIZZAS TABLE ───────────────────── -->
       <div class="sales-card" style="margin-bottom:20px;">
@@ -3071,24 +3078,22 @@ function confirmDeleteUser(id) {
 
 </script>
 
-<!-- ✅ DASHBOARD CHARTS -->
+<!-- ✅ DASHBOARD CHARTS (Top Selling + Monthly Trend) -->
 <script>
 (function () {
 
-  // ── Data from PHP ─────────────────────────────────────────────
-  const topLabels = <?= json_encode($chartLabels) ?>;
-  const topData   = <?= json_encode($chartData) ?>;
+  const topLabels   = <?= json_encode($chartLabels) ?>;
+  const topData     = <?= json_encode($chartData) ?>;
   const trendLabels = <?= json_encode($trendLabels) ?>;
   const trendData   = <?= json_encode($trendData) ?>;
 
-  // ── Palette ───────────────────────────────────────────────────
   const barColors = [
     '#f4a700','#f47c00','#e03e00','#c0392b','#e67e22',
     '#d35400','#e74c3c','#f39c12','#ca6f1e','#a93226'
   ];
 
-  // ── TOP SELLING PIZZAS (Horizontal Bar) ──────────────────────
-  /*const topCtx = document.getElementById('topPizzasChart');
+  // ── TOP SELLING PIZZAS (Horizontal Bar) ──
+  const topCtx = document.getElementById('topPizzasChart');
   if (topCtx) {
     if (topLabels.length === 0) {
       topCtx.parentElement.innerHTML += '<p style="color:#aaa;font-size:13px;">No sales data yet.</p>';
@@ -3111,30 +3116,19 @@ function confirmDeleteUser(id) {
           responsive: true,
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => ` ${ctx.parsed.x} units sold`
-              }
-            }
+            tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x} units sold` } }
           },
           scales: {
-            x: {
-              beginAtZero: true,
-              ticks: { stepSize: 1, font: { size: 11 } },
-              grid: { color: '#f0f0f0' }
-            },
-            y: {
-              ticks: { font: { size: 11 } },
-              grid: { display: false }
-            }
+            x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f0f0f0' } },
+            y: { ticks: { font: { size: 11 } }, grid: { display: false } }
           }
         }
       });
     }
-  }*/
+  }
 
-  // ── MONTHLY SALES TREND (Line) ────────────────────────────────
-  /*const trendCtx = document.getElementById('salesTrendChart');
+  // ── MONTHLY SALES TREND (Line) ──
+  const trendCtx = document.getElementById('salesTrendChart');
   if (trendCtx) {
     if (trendLabels.length === 0) {
       trendCtx.parentElement.innerHTML += '<p style="color:#aaa;font-size:13px;">No trend data yet.</p>';
@@ -3159,47 +3153,40 @@ function confirmDeleteUser(id) {
           responsive: true,
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => ` ₱${ctx.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
-              }
-            }
+            tooltip: { callbacks: { label: ctx => ` ₱${ctx.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` } }
           },
           scales: {
-            x: {
-              ticks: { font: { size: 11 } },
-              grid: { color: '#f0f0f0' }
-            },
+            x: { ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } },
             y: {
               beginAtZero: true,
-              ticks: {
-                font: { size: 11 },
-                callback: v => '₱' + v.toLocaleString()
-              },
+              ticks: { font: { size: 11 }, callback: v => '₱' + v.toLocaleString() },
               grid: { color: '#f0f0f0' }
             }
           }
         }
       });
     }
-  }*/
+  }
 
-<!-- ✅ SALES SECTION CHARTS -->
+})();
+</script>
+
+<!-- ✅ SALES SECTION CHARTS (Weekly Revenue + Top by Revenue) -->
 <script>
 (function () {
 
-  const weeklyLabels  = <?= json_encode($weeklyLabels) ?>;
-  const weeklyData    = <?= json_encode($weeklyData) ?>;
-  const topRevLabels  = <?= json_encode($topRevLabels) ?>;
-  const topRevData    = <?= json_encode($topRevData) ?>;
+  const weeklyLabels = <?= json_encode($weeklyLabels) ?>;
+  const weeklyData   = <?= json_encode($weeklyData) ?>;
+  const topRevLabels = <?= json_encode($topRevLabels) ?>;
+  const topRevData   = <?= json_encode($topRevData) ?>;
 
   const orangePalette = [
     '#f4a700','#f47c00','#e03e00','#c0392b','#e67e22',
     '#d35400','#e74c3c','#f39c12','#ca6f1e','#a93226'
   ];
 
-  // ── Weekly Revenue Bar ──────────────────────────────────────
-  /*const weeklyCtx = document.getElementById('weeklyRevenueChart');
+  // ── Weekly Revenue Bar ──
+  const weeklyCtx = document.getElementById('weeklyRevenueChart');
   if (weeklyCtx) {
     if (weeklyLabels.length === 0) {
       weeklyCtx.style.display = 'none';
@@ -3222,29 +3209,22 @@ function confirmDeleteUser(id) {
           responsive: true,
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => ` ₱${ctx.parsed.y.toLocaleString('en-PH',{minimumFractionDigits:2})}`
-              }
-            }
+            tooltip: { callbacks: { label: ctx => ` ₱${ctx.parsed.y.toLocaleString('en-PH',{minimumFractionDigits:2})}` } }
           },
           scales: {
             x: { ticks: { font: { size: 11 } }, grid: { display: false } },
             y: {
               beginAtZero: true,
-              ticks: {
-                font: { size: 11 },
-                callback: v => '₱' + v.toLocaleString()
-              },
+              ticks: { font: { size: 11 }, callback: v => '₱' + v.toLocaleString() },
               grid: { color: '#f0f0f0' }
             }
           }
         }
       });
     }
-  }*/
+  }
 
-  // ── Top Pizzas by Revenue Horizontal Bar ─────────────────
+  // ── Top Pizzas by Revenue Horizontal Bar ──
   const topRevCtx = document.getElementById('topRevenueChart');
   if (topRevCtx) {
     if (topRevLabels.length === 0) {
@@ -3267,11 +3247,7 @@ function confirmDeleteUser(id) {
           responsive: true,
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => ` ₱${ctx.parsed.x.toLocaleString('en-PH',{minimumFractionDigits:2})}`
-              }
-            }
+            tooltip: { callbacks: { label: ctx => ` ₱${ctx.parsed.x.toLocaleString('en-PH',{minimumFractionDigits:2})}` } }
           },
           scales: {
             x: {
