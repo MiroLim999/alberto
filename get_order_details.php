@@ -1,30 +1,20 @@
 <?php
 // =============================================
-// get_order_details.php
-// 3NF: order_items now includes pizza_id + variant_id
+// get_order_details.php (strict 3NF — uses views)
 // =============================================
 
 include "db_connect.php";
 
 $order_id = (int)$_GET['order_id'];
 
-// ── Get order info ────────────────────────────
-$orderQuery  = "SELECT * FROM orders WHERE order_id = $order_id LIMIT 1";
-$orderResult = $conn->query($orderQuery);
+$orderResult = $conn->query("SELECT * FROM v_orders_full WHERE order_id = $order_id LIMIT 1");
 $order       = $orderResult->fetch_assoc();
 
-// ── Get items (with snapshot + FK columns) ────
-$itemsQuery  = "SELECT * FROM order_items WHERE order_id = $order_id";
-$itemsResult = $conn->query($itemsQuery);
-
+$itemsResult = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $order_id");
 $items = [];
 while ($row = $itemsResult->fetch_assoc()) {
     $items[] = $row;
 }
 
-// ── Return JSON ───────────────────────────────
-echo json_encode([
-    "order" => $order,
-    "items" => $items
-]);
+echo json_encode(["order" => $order, "items" => $items]);
 ?>

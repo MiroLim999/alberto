@@ -21,14 +21,14 @@ $user_name = "Admin";
 // ── SALES ──────────────────────────────────
 $dailySales = $conn->query("
   SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM orders
+  FROM v_orders_full
   WHERE status = 'completed'
     AND DATE(created_at) = CURDATE()
 ")->fetch_assoc()['total'];
 
 $monthlySales = $conn->query("
   SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM orders
+  FROM v_orders_full
   WHERE status = 'completed'
     AND MONTH(created_at) = MONTH(CURDATE())
     AND YEAR(created_at)  = YEAR(CURDATE())
@@ -36,7 +36,7 @@ $monthlySales = $conn->query("
 
 $yearlySales = $conn->query("
   SELECT COALESCE(SUM(total_amount), 0) AS total
-  FROM orders
+  FROM v_orders_full
   WHERE status = 'completed'
     AND YEAR(created_at) = YEAR(CURDATE())
 ")->fetch_assoc()['total'];
@@ -53,18 +53,17 @@ $goodStock     = $conn->query("SELECT COUNT(*) AS c FROM pizzas WHERE stock >= 1
 
 // ── LOW STOCK PIZZAS (for inventory table) ──
 $lowStockPizzas = $conn->query("
-  SELECT p.pizza_name, c.category_name AS category, p.stock
-  FROM pizzas p
-  JOIN categories c ON p.category_id = c.category_id
-  WHERE p.stock < 10
-  ORDER BY p.stock ASC
+  SELECT pizza_name, category, stock
+  FROM v_pizzas_full
+  WHERE stock < 10
+  ORDER BY stock ASC
   LIMIT 10
 ");
 
 // ── TOP SELLING PIZZAS (for bar chart) ──
 $topPizzas = $conn->query("
   SELECT oi.pizza_name, SUM(oi.quantity) AS total_sold
-  FROM order_items oi
+  FROM v_order_items_full oi
   JOIN orders o ON oi.order_id = o.order_id
   WHERE o.status = 'completed'
   GROUP BY oi.pizza_name
@@ -85,7 +84,7 @@ $monthlySalesTrend = $conn->query("
          MONTH(created_at) AS month_num,
          YEAR(created_at)  AS year_num,
          SUM(total_amount) AS total
-  FROM orders
+  FROM v_orders_full
   WHERE status = 'completed'
     AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
   GROUP BY year_num, month_num, month_label
@@ -107,7 +106,7 @@ while ($row = $monthlySalesTrend->fetch_assoc()) {
 $salesStatusBreakdown = [];
 $statusRes = $conn->query("
   SELECT status, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM orders
+  FROM v_orders_full
   GROUP BY status
 ");
 while ($row = $statusRes->fetch_assoc()) {
@@ -116,12 +115,12 @@ while ($row = $statusRes->fetch_assoc()) {
 
 // ── TOTAL REVENUE (completed only) ─────────
 $totalRevenue = $conn->query("
-  SELECT COALESCE(SUM(total_amount),0) AS total FROM orders WHERE status='completed'
+  SELECT COALESCE(SUM(total_amount),0) AS total FROM v_orders_full WHERE status='completed'
 ")->fetch_assoc()['total'];
 
 // ── AVERAGE ORDER VALUE ─────────────────────
 $avgOrderVal = $conn->query("
-  SELECT COALESCE(AVG(total_amount),0) AS avg FROM orders WHERE status='completed'
+  SELECT COALESCE(AVG(total_amount),0) AS avg FROM v_orders_full WHERE status='completed'
 ")->fetch_assoc()['avg'];
 
 // ── TOTAL ITEMS SOLD ────────────────────────
@@ -136,7 +135,7 @@ $totalItemsSold = $conn->query("
 $paymentBreakdown = [];
 $payRes = $conn->query("
   SELECT payment_method, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM orders
+  FROM v_orders_full
   WHERE status='completed'
   GROUP BY payment_method
 ");
@@ -148,7 +147,7 @@ while ($row = $payRes->fetch_assoc()) {
 $orderTypeBreakdown = [];
 $typeRes = $conn->query("
   SELECT order_type, COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue
-  FROM orders
+  FROM v_orders_full
   WHERE status='completed'
   GROUP BY order_type
 ");
@@ -159,7 +158,7 @@ while ($row = $typeRes->fetch_assoc()) {
 // ── BEST SELLING ITEMS (by revenue) ────────
 $topByRevenue = $conn->query("
   SELECT oi.pizza_name, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM order_items oi
+  FROM v_order_items_full oi
   JOIN orders o ON oi.order_id = o.order_id
   WHERE o.status='completed'
   GROUP BY oi.pizza_name
@@ -171,10 +170,8 @@ $topByRevenue = $conn->query("
 $recentOrders = $conn->query("
   SELECT o.order_id, o.customer_name, o.total_amount, o.status,
          o.order_type, o.payment_method, o.created_at,
-         COUNT(oi.item_id) AS item_count
-  FROM orders o
-  LEFT JOIN order_items oi ON o.order_id = oi.order_id
-  GROUP BY o.order_id
+         (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.order_id) AS item_count
+  FROM v_orders_full o
   ORDER BY o.created_at DESC
   LIMIT 15
 ");
@@ -183,7 +180,7 @@ $recentOrders = $conn->query("
 $sizeBreakdown = [];
 $sizeRes = $conn->query("
   SELECT oi.size, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM order_items oi
+  FROM v_order_items_full oi
   JOIN orders o ON oi.order_id = o.order_id
   WHERE o.status='completed'
   GROUP BY oi.size
@@ -197,7 +194,7 @@ while ($row = $sizeRes->fetch_assoc()) {
 $cheeseBreakdown = [];
 $cheeseRes = $conn->query("
   SELECT oi.cheese, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM order_items oi
+  FROM v_order_items_full oi
   JOIN orders o ON oi.order_id = o.order_id
   WHERE o.status='completed'
   GROUP BY oi.cheese
@@ -212,7 +209,7 @@ $weeklySalesRes = $conn->query("
   SELECT DATE(created_at) AS sale_date,
          COUNT(*) AS order_count,
          COALESCE(SUM(total_amount),0) AS revenue
-  FROM orders
+  FROM v_orders_full
   WHERE status='completed'
     AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
   GROUP BY sale_date
@@ -235,7 +232,7 @@ while ($row = $topByRevenue->fetch_assoc()) {
 // re-run for the table below
 $topByRevenueTable = $conn->query("
   SELECT oi.pizza_name, SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
-  FROM order_items oi
+  FROM v_order_items_full oi
   JOIN orders o ON oi.order_id = o.order_id
   WHERE o.status='completed'
   GROUP BY oi.pizza_name
@@ -859,10 +856,8 @@ if (isset($_SESSION['user_id'])) {
       <tbody>
         <?php
         $result = $conn->query("
-            SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
-                   p.ingredients, p.stock, p.image_path
-            FROM pizzas p
-            JOIN categories c ON p.category_id = c.category_id
+            SELECT pizza_id, pizza_name, category, ingredients, stock, image_path
+            FROM v_pizzas_full
         ");
         while ($row = $result->fetch_assoc()):
           $stock = (int)$row['stock'];

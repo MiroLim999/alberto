@@ -4,8 +4,8 @@ include "db_connect.php";
 
 // Fetch pending orders
 $ordersQuery = "
-  SELECT * FROM orders 
-  WHERE status = 'pending' 
+  SELECT * FROM v_orders_full
+  WHERE status = 'pending'
   ORDER BY created_at DESC
 ";
 $ordersResult = $conn->query($ordersQuery);
@@ -26,11 +26,9 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $menuQuery = "
-  SELECT p.pizza_id, p.pizza_name, c.category_name AS category,
-         p.ingredients, p.image_path
-  FROM pizzas p
-  JOIN categories c ON p.category_id = c.category_id
-  ORDER BY c.category_name, p.pizza_name
+  SELECT pizza_id, pizza_name, category, ingredients, image_path
+  FROM v_pizzas_full
+  ORDER BY category, pizza_name
 ";
 $menuResult = $conn->query($menuQuery);
 ?>

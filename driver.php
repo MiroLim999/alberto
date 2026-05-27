@@ -5,7 +5,7 @@ include "db_connect.php";
 // ── FETCH: Orders ready for delivery (completed by cashier, not yet accepted) ──
 $availableQuery = "
   SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM orders o
+  FROM v_orders_full o
   LEFT JOIN branches b ON o.branch_id = b.branch_id
   WHERE o.order_type = 'DELIVERY'
     AND o.status = 'completed'
@@ -18,7 +18,7 @@ $driver_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 0;
 
 $activeQuery = "
   SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM orders o
+  FROM v_orders_full o
   LEFT JOIN branches b ON o.branch_id = b.branch_id
   WHERE o.order_type = 'DELIVERY'
     AND o.status = 'out_for_delivery'
@@ -30,7 +30,7 @@ $activeResult = $conn->query($activeQuery);
 // ── FETCH: Recently delivered by this driver (last 20) ──
 $doneQuery = "
   SELECT o.*, b.branch_name, b.location AS branch_location
-  FROM orders o
+  FROM v_orders_full o
   LEFT JOIN branches b ON o.branch_id = b.branch_id
   WHERE o.order_type = 'DELIVERY'
     AND o.status = 'delivered'
@@ -443,7 +443,7 @@ $doneResult = $conn->query($doneQuery);
 
       // Fetch items for this order
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM order_items WHERE order_id = $oid");
+      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
     ?>
 
     <div class="delivery-card card-available">
@@ -511,7 +511,7 @@ $doneResult = $conn->query($doneQuery);
       $hasActive = true;
 
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM order_items WHERE order_id = $oid");
+      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
     ?>
 
     <div class="delivery-card card-active">
@@ -578,7 +578,7 @@ $doneResult = $conn->query($doneQuery);
       $hasDone = true;
 
       $oid   = intval($order['order_id']);
-      $items = $conn->query("SELECT * FROM order_items WHERE order_id = $oid");
+      $items = $conn->query("SELECT * FROM v_order_items_full WHERE order_id = $oid");
     ?>
 
     <div class="delivery-card card-done">
