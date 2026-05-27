@@ -1921,6 +1921,15 @@ if (isset($_SESSION['user_id'])) {
           text-align: right;
           flex-shrink: 0;
         }
+
+        /* Revenue share bar in best-selling table */
+        .rev-bar {
+          width: var(--bar-w, 4%);
+          min-width: 4px;
+          height: 8px;
+          background: linear-gradient(90deg, #f4a700, #e03e00);
+          border-radius: 4px;
+        }
       </style>
 
       <!-- ── ROW 1: 4 KPI CARDS ──────────────────────── -->
@@ -2144,13 +2153,7 @@ if (isset($_SESSION['user_id'])) {
               <td style="font-weight:700; color:#e03e00;">₱<?= number_format($row['revenue'], 2) ?></td>
               <td>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <div style="
-                    width:<?= max($share, 4) ?>%;
-                    height:8px;
-                    background: linear-gradient(90deg,#f4a700,#e03e00);
-                    border-radius:4px;
-                    min-width:4px;
-                  "></div>
+                  <div class="rev-bar" style="--bar-w:<?= max($share, 4) ?>%"></div>
                   <span style="font-size:12px;color:#999;"><?= $share ?>%</span>
                 </div>
               </td>
